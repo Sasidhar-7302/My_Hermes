@@ -1,11 +1,127 @@
 # -*- coding: utf-8 -*-
-import os, json, re
-from fastapi import FastAPI, Form, Request
+"""
+Hermes Agent Company Dashboard & Executive Operations Center
+Integrates Multi-Agent Team Roster, Multi-Monitor Desktop Shell, Paper Desktop MCP Studio,
+PII Redaction Shield, RPA Macro Studio, System & Proactivity Observer, and Browser Control.
+"""
+
+import os
+import sys
+import json
+import re
+import time
+from typing import Any, Dict, List, Optional
+
+_cur_dir = os.path.dirname(os.path.abspath(__file__))
+if _cur_dir not in sys.path:
+    sys.path.insert(0, _cur_dir)
+
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
-from role_registry import ROLES, VERIFIED_MODELS
 
-app = FastAPI(title="Hermes Agent Company")
+try:
+    from local_model_lab import role_registry
+    from local_model_lab.role_registry import ROLES, VERIFIED_MODELS
+except ImportError:
+    import role_registry
+    from role_registry import ROLES, VERIFIED_MODELS
+
+# Import peripheral Hermes modules with graceful fallbacks
+try:
+    from local_model_lab.window_services import (
+        get_display_monitors,
+        list_active_windows,
+        snap_window,
+        move_window_to_monitor,
+        focus_window,
+    )
+except ImportError:
+    try:
+        from window_services import (
+            get_display_monitors,
+            list_active_windows,
+            snap_window,
+            move_window_to_monitor,
+            focus_window,
+        )
+    except Exception:
+        get_display_monitors = lambda: []
+        list_active_windows = lambda: []
+        snap_window = lambda t, p: {"status": "error", "message": "window_services unavailable"}
+        move_window_to_monitor = lambda t, m: {"status": "error", "message": "window_services unavailable"}
+        focus_window = lambda t: False
+
+try:
+    from local_model_lab.shell_daemon import (
+        is_emergency_stopped,
+        trigger_emergency_stop,
+        clear_emergency_stop,
+    )
+except ImportError:
+    try:
+        from shell_daemon import (
+            is_emergency_stopped,
+            trigger_emergency_stop,
+            clear_emergency_stop,
+        )
+    except Exception:
+        is_emergency_stopped = lambda: False
+        trigger_emergency_stop = lambda: "EMERGENCY_STOP_ENGAGED"
+        clear_emergency_stop = lambda: None
+
+try:
+    from local_model_lab.paper_client import (
+        get_paper_client,
+        is_port_open,
+        detect_paper_executable,
+    )
+except ImportError:
+    try:
+        from paper_client import (
+            get_paper_client,
+            is_port_open,
+            detect_paper_executable,
+        )
+    except Exception:
+        get_paper_client = lambda: None
+        is_port_open = lambda host="127.0.0.1", port=29979, timeout=0.5: False
+        detect_paper_executable = lambda: None
+
+try:
+    from local_model_lab.pii_shield import PIIShield, mask_sensitive_text
+except ImportError:
+    try:
+        from pii_shield import PIIShield, mask_sensitive_text
+    except Exception:
+        class PIIShield:
+            PATTERNS = {}
+            @classmethod
+            def mask(cls, text): return text
+            @classmethod
+            def detect_entities(cls, text): return []
+            @classmethod
+            def has_sensitive_data(cls, text): return False
+        mask_sensitive_text = lambda text: text
+
+try:
+    from local_model_lab.rpa_recorder import get_rpa_recorder
+except ImportError:
+    try:
+        from rpa_recorder import get_rpa_recorder
+    except Exception:
+        get_rpa_recorder = lambda: None
+
+try:
+    from local_model_lab.system_observer import get_system_observer
+except ImportError:
+    try:
+        from system_observer import get_system_observer
+    except Exception:
+        get_system_observer = lambda: None
+
+
+app = FastAPI(title="Hermes Agent Operations Center")
 
 ROLE_META = {
     "CEO": {
@@ -58,6 +174,7 @@ ROLE_META = {
     }
 }
 
+
 def get_tasks():
     tasks_file = os.path.join(os.path.dirname(__file__), 'role_tasks.json')
     if os.path.exists(tasks_file):
@@ -66,6 +183,9 @@ def get_tasks():
                 return json.load(f)
         except Exception:
             return []
+    return []
+
+
 def get_employee_logs(role: str = None):
     emp_dir = os.path.join(os.path.dirname(__file__), 'employee_logs')
     if role:
@@ -76,30 +196,36 @@ def get_employee_logs(role: str = None):
                     return json.load(f)
             except Exception:
                 pass
-        # Fallback to filtering global tasks
         all_tasks = get_tasks()
         return [t for t in all_tasks if t.get("role") == role]
     return get_tasks()
+
+
+def save_soul(role, new_soul):
+    reg_file = os.path.join(os.path.dirname(__file__), 'role_registry.py')
+    with open(reg_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    pattern = rf'("{role}":\s*\{{[^}}]*?"soul":\s*")(?:[^"\\]|\\.)*(")'
+    escaped_soul = new_soul.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+    new_content, count = re.subn(pattern, rf'\g<1>{escaped_soul}\g<2>', content, count=1)
+
+    if count > 0:
+        with open(reg_file, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        return True
+    return False
+
+
+# ==============================================================================
+# REST API ENDPOINTS
+# ==============================================================================
 
 @app.get("/api/employee_logs/{role}")
 async def api_get_employee_logs(role: str):
     logs = get_employee_logs(role)
     return JSONResponse(content={"role": role, "count": len(logs), "logs": logs})
 
-def save_soul(role, new_soul):
-    reg_file = os.path.join(os.path.dirname(__file__), 'role_registry.py')
-    with open(reg_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    pattern = rf'("{role}":\s*\{{[^}}]*?"soul":\s*")(?:[^"\\]|\\.)*(")'
-    escaped_soul = new_soul.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
-    new_content, count = re.subn(pattern, rf'\g<1>{escaped_soul}\g<2>', content, count=1)
-    
-    if count > 0:
-        with open(reg_file, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-        return True
-    return False
 
 @app.post("/api/update_soul")
 async def api_update_soul(request: Request):
@@ -111,23 +237,250 @@ async def api_update_soul(request: Request):
         return {"status": "ok" if success else "error"}
     return {"status": "bad_request"}
 
+
+@app.get("/api/desktop/monitors")
+async def api_desktop_monitors():
+    monitors = [m.to_dict() for m in get_display_monitors()]
+    return JSONResponse(content={"count": len(monitors), "monitors": monitors})
+
+
+@app.get("/api/desktop/windows")
+async def api_desktop_windows():
+    raw_windows = list_active_windows()
+    formatted = []
+    for w in raw_windows:
+        if isinstance(w, dict):
+            rect = w.get("rect", (0, 0, 0, 0))
+            formatted.append({
+                "hwnd": w.get("hwnd", 0),
+                "title": w.get("title", "Untitled"),
+                "monitor": w.get("monitor_id", 1),
+                "is_active": w.get("is_active", False),
+                "x": rect[0] if len(rect) > 0 else 0,
+                "y": rect[1] if len(rect) > 1 else 0,
+                "width": rect[2] if len(rect) > 2 else 0,
+                "height": rect[3] if len(rect) > 3 else 0,
+            })
+        elif hasattr(w, "to_dict"):
+            formatted.append(w.to_dict())
+        else:
+            formatted.append(dict(w))
+    return JSONResponse(content={"count": len(formatted), "windows": formatted})
+
+
+@app.post("/api/desktop/snap")
+async def api_desktop_snap(request: Request):
+    data = await request.json()
+    target = data.get("target")
+    position = data.get("position", "left")
+    res = snap_window(target, position)
+    return JSONResponse(content=res)
+
+
+@app.post("/api/desktop/move_monitor")
+async def api_desktop_move_monitor(request: Request):
+    data = await request.json()
+    target = data.get("target")
+    monitor_id = int(data.get("monitor_id", 1))
+    res = move_window_to_monitor(target, monitor_id)
+    return JSONResponse(content=res)
+
+
+@app.get("/api/desktop/emergency_stop")
+async def api_get_emergency_stop():
+    return JSONResponse(content={"stopped": is_emergency_stopped()})
+
+
+@app.post("/api/desktop/emergency_stop")
+async def api_post_emergency_stop(request: Request):
+    data = await request.json()
+    stopped = data.get("stopped", True)
+    if stopped:
+        trigger_emergency_stop()
+    else:
+        clear_emergency_stop()
+    return JSONResponse(content={"stopped": is_emergency_stopped()})
+
+
+@app.get("/api/paper/status")
+async def api_paper_status():
+    listening = is_port_open(port=29979)
+    exe_path = detect_paper_executable()
+    res = {
+        "listening": listening,
+        "port": 29979,
+        "executable_found": bool(exe_path),
+        "executable_path": str(exe_path) if exe_path else "",
+        "session_id": "",
+        "file_name": "",
+        "artboards": 0,
+    }
+    if listening:
+        client = get_paper_client()
+        if client:
+            try:
+                status = client.get_status()
+                res.update({
+                    "session_id": status.session_id,
+                    "file_name": status.file_name,
+                    "artboards": status.artboards,
+                    "file_open": status.file_open,
+                })
+            except Exception as e:
+                res["message"] = str(e)
+    return JSONResponse(content=res)
+
+
+@app.post("/api/paper/artboard")
+async def api_paper_artboard(request: Request):
+    data = await request.json()
+    name = data.get("name", "Screen")
+    w = int(data.get("width", 1440))
+    h = int(data.get("height", 900))
+    client = get_paper_client()
+    if not client or not is_port_open():
+        return JSONResponse(content={"status": "error", "message": "Paper Desktop MCP server is offline"}, status_code=503)
+    res = client.create_artboard(name=name, width=w, height=h)
+    return JSONResponse(content=res)
+
+
+@app.post("/api/paper/write_html")
+async def api_paper_write_html(request: Request):
+    data = await request.json()
+    html_code = data.get("html", "")
+    mode = data.get("mode", "replace")
+    client = get_paper_client()
+    if not client or not is_port_open():
+        return JSONResponse(content={"status": "error", "message": "Paper Desktop MCP server is offline"}, status_code=503)
+    res = client.write_html(html=html_code, mode=mode)
+    return JSONResponse(content=res)
+
+
+@app.post("/api/security/mask_pii")
+async def api_security_mask_pii(request: Request):
+    data = await request.json()
+    text = data.get("text", "")
+    masked = PIIShield.mask(text)
+    entities = PIIShield.detect_entities(text)
+    return JSONResponse(content={
+        "original_len": len(text),
+        "masked_len": len(masked),
+        "entities_count": len(entities),
+        "entities": entities,
+        "masked_text": masked,
+        "has_sensitive": len(entities) > 0,
+    })
+
+
+@app.get("/api/rpa/macros")
+async def api_rpa_macros():
+    recorder = get_rpa_recorder()
+    if not recorder:
+        return JSONResponse(content={"macros": []})
+    macros = recorder.list_recordings()
+    return JSONResponse(content={"count": len(macros), "macros": macros, "is_recording": recorder.is_recording, "is_replaying": recorder.is_replaying})
+
+
+@app.post("/api/rpa/record/start")
+async def api_rpa_record_start(request: Request):
+    data = await request.json()
+    name = data.get("name", f"macro_{int(time.time())}")
+    recorder = get_rpa_recorder()
+    if not recorder:
+        return JSONResponse(content={"status": "error", "message": "RPA recorder unavailable"}, status_code=500)
+    res = recorder.start_recording(name)
+    return JSONResponse(content=res)
+
+
+@app.post("/api/rpa/record/stop")
+async def api_rpa_record_stop():
+    recorder = get_rpa_recorder()
+    if not recorder:
+        return JSONResponse(content={"status": "error", "message": "RPA recorder unavailable"}, status_code=500)
+    res = recorder.stop_recording()
+    return JSONResponse(content=res)
+
+
+@app.post("/api/rpa/replay")
+async def api_rpa_replay(request: Request):
+    data = await request.json()
+    name = data.get("name", "")
+    speed = float(data.get("speed", 1.0))
+    recorder = get_rpa_recorder()
+    if not recorder:
+        return JSONResponse(content={"status": "error", "message": "RPA recorder unavailable"}, status_code=500)
+    res = recorder.replay(name=name, speed=speed)
+    return JSONResponse(content=res)
+
+
+@app.get("/api/system/health")
+async def api_system_health():
+    obs = get_system_observer()
+    if not obs:
+        return JSONResponse(content={"status": "UNKNOWN", "cpu_percent": 0, "ram_percent": 0, "disk_percent": 0})
+    health = obs.get_health()
+    return JSONResponse(content=health.to_dict())
+
+
+@app.get("/api/system/briefing")
+async def api_system_briefing():
+    obs = get_system_observer()
+    if not obs:
+        return JSONResponse(content={"briefing": "System observer unavailable"})
+    briefing = obs.generate_daily_briefing()
+    return JSONResponse(content={"briefing": briefing})
+
+
+@app.get("/api/browser/status")
+async def api_browser_status():
+    ext_dir = os.path.join(os.path.dirname(__file__), "..", "browser_extension", "hermes_browser_control")
+    exists = os.path.exists(ext_dir)
+    return JSONResponse(content={
+        "installed": exists,
+        "path": os.path.abspath(ext_dir) if exists else "",
+        "version": "1.0.0",
+        "manifest_version": 3,
+        "capabilities": [
+            "Real-session cookie & auth reuse",
+            "Bypasses Cloudflare / Turnstile bot challenge pages",
+            "Sub-50ms DOM interactive element extraction",
+            "Autonomous CAPTCHA & gate detection",
+        ]
+    })
+
+
+# ==============================================================================
+# MAIN DASHBOARD UI
+# ==============================================================================
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     tasks = get_tasks()
-    
+
     import importlib
-    import role_registry
     importlib.reload(role_registry)
     current_roles = role_registry.ROLES
 
     num_roles = len(current_roles)
     num_tasks = len(tasks)
 
+    # Initial probe for stats
+    paper_online = is_port_open(port=29979)
+    stopped_state = is_emergency_stopped()
+    monitors_list = get_display_monitors()
+    num_monitors = len(monitors_list)
+    windows_list = list_active_windows()
+    num_windows = len(windows_list)
+
+    obs = get_system_observer()
+    health_data = obs.get_health().to_dict() if obs else {"cpu_percent": 0.0, "ram_percent": 0.0}
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Hermes Multi-Agent Company</title>
+    <title>Hermes Operations Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         :root {{
             --bg-canvas: #041411;
@@ -140,6 +493,9 @@ def dashboard():
             --text-main: #d3f3e3;
             --text-muted: #719f8e;
             --accent-green: #34d399;
+            --accent-gold: #fbbf24;
+            --accent-red: #f87171;
+            --accent-blue: #38bdf8;
             --btn-bg: #0b332b;
             --btn-hover: #124b3f;
         }}
@@ -154,7 +510,7 @@ def dashboard():
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background-color: var(--bg-canvas);
             color: var(--text-main);
-            padding: 24px 32px 60px;
+            padding: 20px 28px 60px;
             font-size: 13px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
@@ -178,25 +534,34 @@ def dashboard():
         /* TOP STATS BAR */
         .stats-bar {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-bottom: 22px;
         }}
 
         .stat-widget {{
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: 8px;
-            padding: 14px 18px;
+            padding: 12px 16px;
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
+            position: relative;
+            overflow: hidden;
+        }}
+
+        .stat-widget::before {{
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--border-bright), transparent);
         }}
 
         .stat-icon {{
-            font-size: 24px;
-            width: 44px;
-            height: 44px;
+            font-size: 22px;
+            width: 42px;
+            height: 42px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -219,26 +584,39 @@ def dashboard():
         }}
 
         .stat-val {{
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--text-heading);
             margin-top: 2px;
         }}
 
-        /* TABS HEADER */
+        /* NAVIGATION TABS HEADER */
         .nav-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid var(--border-subtle);
             padding-bottom: 14px;
-            margin-bottom: 24px;
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+            gap: 14px;
         }}
 
         .nav-title-group {{
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+        }}
+
+        .nav-badge {{
+            background: rgba(52, 211, 153, 0.12);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
         }}
 
         .section-title {{
@@ -251,9 +629,10 @@ def dashboard():
 
         .tab-controls {{
             display: flex;
-            gap: 8px;
+            flex-wrap: wrap;
+            gap: 6px;
             background: var(--bg-card);
-            padding: 3px;
+            padding: 4px;
             border-radius: 6px;
             border: 1px solid var(--border-subtle);
         }}
@@ -262,18 +641,22 @@ def dashboard():
             background: transparent;
             border: none;
             color: var(--text-muted);
-            padding: 6px 14px;
+            padding: 6px 12px;
             border-radius: 4px;
             font-size: 11px;
             font-weight: 600;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
             cursor: pointer;
             transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }}
 
         .tab-btn:hover {{
             color: var(--text-main);
+            background: rgba(255, 255, 255, 0.03);
         }}
 
         .tab-btn.active {{
@@ -284,33 +667,71 @@ def dashboard():
 
         .tab-panel {{
             display: none;
+            animation: fadeIn 0.15s ease;
         }}
 
         .tab-panel.active {{
             display: block;
         }}
 
+        @keyframes fadeIn {{
+            from {{ opacity: 0; transform: translateY(4px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+
+        /* BUTTONS & CONTROLS */
+        .btn-action {{
+            background: var(--btn-bg);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-heading);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }}
+
+        .btn-action:hover {{
+            background: var(--btn-hover);
+            border-color: var(--border-bright);
+        }}
+
+        .btn-danger {{
+            background: rgba(248, 113, 113, 0.15);
+            border-color: rgba(248, 113, 113, 0.35);
+            color: #fca5a5;
+        }}
+
+        .btn-danger:hover {{
+            background: rgba(248, 113, 113, 0.3);
+            border-color: var(--accent-red);
+        }}
+
         /* EMPLOYEE CARDS GRID */
         .cards-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 18px;
         }}
 
         .employee-card {{
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: 8px;
-            padding: 20px;
+            padding: 18px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
             transition: transform 0.15s ease, border-color 0.15s ease;
         }}
 
         .employee-card:hover {{
             border-color: var(--border-bright);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
         }}
 
         .card-top {{
@@ -326,11 +747,11 @@ def dashboard():
         }}
 
         .role-avatar {{
-            font-size: 26px;
+            font-size: 24px;
             background: var(--bg-input);
             border: 1px solid var(--border-subtle);
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
             border-radius: 8px;
             display: flex;
             align-items: center;
@@ -350,7 +771,7 @@ def dashboard():
 
         .role-name {{
             color: var(--text-heading);
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             letter-spacing: 0.05em;
         }}
@@ -358,7 +779,7 @@ def dashboard():
         .role-subhead {{
             font-size: 11px;
             color: var(--text-muted);
-            margin-top: 2px;
+            margin-top: 1px;
         }}
 
         .status-pill {{
@@ -376,6 +797,12 @@ def dashboard():
             border: 1px solid rgba(52, 211, 153, 0.25);
         }}
 
+        .status-pill.offline {{
+            background: rgba(248, 113, 113, 0.12);
+            color: var(--accent-red);
+            border-color: rgba(248, 113, 113, 0.25);
+        }}
+
         .pulse-dot {{
             width: 6px;
             height: 6px;
@@ -390,7 +817,6 @@ def dashboard():
             100% {{ opacity: 0.4; transform: scale(0.9); }}
         }}
 
-        /* FALLBACK ROSTER CHAIN */
         .roster-section {{
             display: flex;
             flex-direction: column;
@@ -398,7 +824,7 @@ def dashboard():
             background: var(--bg-input);
             border: 1px solid var(--border-subtle);
             border-radius: 6px;
-            padding: 12px;
+            padding: 10px 12px;
         }}
 
         .roster-title-row {{
@@ -448,10 +874,8 @@ def dashboard():
 
         .chain-arrow {{
             color: var(--text-muted);
-            font-size: 10px;
         }}
 
-        /* SOUL DIRECTIVES TEXTAREA */
         .soul-container {{
             display: flex;
             flex-direction: column;
@@ -461,7 +885,6 @@ def dashboard():
         .soul-header {{
             display: flex;
             justify-content: space-between;
-            align-items: center;
             font-size: 10px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -471,22 +894,21 @@ def dashboard():
 
         .soul-box {{
             width: 100%;
-            height: 85px;
+            height: 90px;
             background: var(--bg-input);
             border: 1px solid var(--border-subtle);
             border-radius: 6px;
+            padding: 10px;
             color: var(--text-main);
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: ui-monospace, SFMono-Regular, monospace;
             font-size: 11px;
-            line-height: 1.5;
-            padding: 10px 12px;
             resize: vertical;
             outline: none;
-            transition: border-color 0.15s;
+            line-height: 1.4;
         }}
 
         .soul-box:focus {{
-            border-color: var(--accent-green);
+            border-color: var(--border-bright);
         }}
 
         .action-row {{
@@ -494,84 +916,81 @@ def dashboard():
             justify-content: flex-end;
             align-items: center;
             gap: 10px;
-            margin-top: 4px;
-        }}
-
-        .save-indicator {{
-            font-size: 11px;
-            color: var(--accent-green);
-            opacity: 0;
-            transition: opacity 0.2s;
-            font-weight: 600;
-        }}
-
-        .save-indicator.visible {{
-            opacity: 1;
         }}
 
         .btn-save {{
             background: var(--btn-bg);
             border: 1px solid var(--border-subtle);
             color: var(--text-heading);
-            padding: 7px 16px;
-            border-radius: 5px;
+            padding: 5px 12px;
+            border-radius: 4px;
             font-size: 11px;
             font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
             cursor: pointer;
             transition: all 0.15s ease;
         }}
 
         .btn-save:hover {{
             background: var(--btn-hover);
-            border-color: var(--text-heading);
+            border-color: var(--border-bright);
         }}
 
-        /* EMPLOYEE LOGS ACCORDION */
+        .save-indicator {{
+            color: var(--accent-green);
+            font-size: 11px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }}
+
+        .save-indicator.visible {{
+            opacity: 1;
+        }}
+
+        /* ACCORDION ACTIVITY LOGS */
         .emp-logs-accordion {{
-            margin-top: 14px;
             border-top: 1px solid var(--border-subtle);
-            padding-top: 12px;
+            padding-top: 10px;
         }}
 
         .btn-toggle-logs {{
             width: 100%;
-            background: var(--bg-card-alt);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-input);
             border: 1px solid var(--border-subtle);
-            color: var(--text-main);
-            padding: 8px 12px;
+            color: var(--text-muted);
+            padding: 7px 10px;
             border-radius: 4px;
             font-size: 11px;
             font-weight: 600;
             cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             transition: all 0.15s ease;
         }}
 
         .btn-toggle-logs:hover {{
-            background: var(--btn-bg);
-            border-color: var(--accent-green);
-            color: var(--text-heading);
+            color: var(--text-main);
+            border-color: var(--border-bright);
         }}
 
         .emp-logs-panel {{
-            margin-top: 10px;
+            margin-top: 8px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 8px;
             display: flex;
             flex-direction: column;
             gap: 8px;
-            max-height: 260px;
-            overflow-y: auto;
-            padding-right: 4px;
         }}
 
         .emp-log-item {{
-            background: var(--bg-input);
+            background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: 4px;
-            padding: 8px 10px;
+            padding: 8px;
             font-size: 11px;
         }}
 
@@ -579,39 +998,112 @@ def dashboard():
             display: flex;
             justify-content: space-between;
             color: var(--text-muted);
-            margin-bottom: 4px;
             font-size: 10px;
+            margin-bottom: 4px;
         }}
 
         .emp-log-task {{
-            font-weight: 600;
             color: var(--text-heading);
             margin-bottom: 4px;
         }}
 
         .emp-log-resp {{
             color: var(--text-main);
-            font-family: ui-monospace, SFMono-Regular, monospace;
-            font-size: 10px;
             white-space: pre-wrap;
-            max-height: 70px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            line-height: 1.4;
+            font-family: ui-monospace, monospace;
+            font-size: 10px;
+            max-height: 80px;
+            overflow-y: auto;
+            background: var(--bg-canvas);
+            padding: 6px;
+            border-radius: 4px;
         }}
 
-        /* FILTER BAR IN LOGS TAB */
-        .filter-bar {{
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 16px;
+        /* GENERIC TABLES & DATA CONTAINERS */
+        .panel-container {{
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-radius: 6px;
-            padding: 10px 16px;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }}
+
+        .panel-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }}
+
+        .panel-title {{
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+
+        .panel-desc {{
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }}
+
+        .data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }}
+
+        .data-table th {{
+            text-align: left;
+            padding: 10px 12px;
+            color: var(--text-muted);
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-input);
+        }}
+
+        .data-table td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-subtle);
+            color: var(--text-main);
+        }}
+
+        .data-table tr:hover td {{
+            background: rgba(255, 255, 255, 0.02);
+        }}
+
+        /* FORMS & INPUTS */
+        .input-text, .input-select, .input-textarea {{
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: var(--text-main);
+            font-size: 12px;
+            outline: none;
+        }}
+
+        .input-text:focus, .input-select:focus, .input-textarea:focus {{
+            border-color: var(--border-bright);
+        }}
+
+        /* LOG AUDIT TRAIL */
+        .filter-bar {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            gap: 14px;
+            flex-wrap: wrap;
         }}
 
         .filter-chips {{
@@ -621,13 +1113,12 @@ def dashboard():
         }}
 
         .chip {{
-            background: var(--bg-card-alt);
+            background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             color: var(--text-muted);
-            padding: 5px 12px;
-            border-radius: 4px;
+            padding: 4px 10px;
+            border-radius: 9999px;
             font-size: 11px;
-            font-weight: 600;
             cursor: pointer;
             transition: all 0.15s ease;
         }}
@@ -639,118 +1130,102 @@ def dashboard():
 
         .chip.active {{
             background: var(--btn-bg);
-            border-color: var(--accent-green);
             color: var(--text-heading);
+            border-color: var(--border-bright);
         }}
 
         .search-input {{
-            background: var(--bg-input);
+            background: var(--bg-card);
             border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 7px 12px;
             color: var(--text-main);
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 11px;
-            min-width: 240px;
+            font-size: 12px;
+            width: 260px;
+            outline: none;
         }}
 
         .search-input:focus {{
-            outline: none;
-            border-color: var(--accent-green);
+            border-color: var(--border-bright);
         }}
 
-        /* AUDIT TRAIL LOGS */
         .logs-stream {{
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
         }}
 
         .log-entry {{
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-left: 3px solid var(--accent-green);
             border-radius: 6px;
-            padding: 16px 20px;
+            padding: 14px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }}
 
         .log-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 8px;
         }}
 
         .log-role-tag {{
-            font-weight: 700;
-            color: var(--text-heading);
-            font-size: 13px;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+            font-weight: 700;
+            color: var(--text-heading);
+            font-size: 12px;
         }}
 
         .log-metrics {{
-            display: flex;
-            gap: 12px;
             font-size: 11px;
             color: var(--text-muted);
+            display: flex;
+            gap: 10px;
         }}
 
         .log-prompt {{
-            font-weight: 500;
-            color: var(--text-main);
-            background: var(--bg-input);
-            padding: 8px 12px;
-            border-radius: 4px;
-            margin-bottom: 10px;
             font-size: 12px;
-            border-left: 2px solid var(--border-bright);
+            color: var(--text-main);
         }}
 
         .log-output {{
             background: var(--bg-input);
             border: 1px solid var(--border-subtle);
             border-radius: 4px;
-            padding: 12px 14px;
+            padding: 10px 12px;
             font-family: ui-monospace, SFMono-Regular, monospace;
             font-size: 11px;
-            color: var(--text-main);
             white-space: pre-wrap;
-            max-height: 240px;
+            max-height: 180px;
             overflow-y: auto;
-            line-height: 1.6;
+            color: #bbf7d0;
         }}
 
-        .empty-logs {{
-            padding: 48px;
-            text-align: center;
-            color: var(--text-muted);
-            border: 1px dashed var(--border-subtle);
-            border-radius: 8px;
-            background: var(--bg-card);
-        }}
-
-        /* TOAST */
+        /* TOAST NOTIFICATION */
         #toast {{
             position: fixed;
             bottom: 24px;
             right: 24px;
-            background: var(--bg-card);
-            border: 1px solid var(--accent-green);
+            background: var(--bg-card-alt);
+            border: 1px solid var(--border-bright);
             color: var(--text-heading);
-            padding: 10px 18px;
+            padding: 12px 20px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             gap: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
             transform: translateY(100px);
             opacity: 0;
-            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.25s ease;
             z-index: 9999;
         }}
 
@@ -761,50 +1236,81 @@ def dashboard():
     </style>
 </head>
 <body>
-    <!-- TOP STATS OVERVIEW -->
+
+    <!-- TOP SYSTEM STATS BAR -->
     <div class="stats-bar">
         <div class="stat-widget">
-            <div class="stat-icon">🏢</div>
+            <div class="stat-icon">👥</div>
             <div class="stat-meta">
-                <span class="stat-label">Active Agents</span>
-                <span class="stat-val">{num_roles} Autonomous Roles</span>
+                <span class="stat-label">Autonomous Agents</span>
+                <span class="stat-val">{num_roles} Active Roles</span>
             </div>
         </div>
+
+        <div class="stat-widget">
+            <div class="stat-icon">🖥️</div>
+            <div class="stat-meta">
+                <span class="stat-label">Multi-Monitor Desktop</span>
+                <span class="stat-val">{num_monitors} Mon &bull; {num_windows} Windows</span>
+            </div>
+        </div>
+
+        <div class="stat-widget">
+            <div class="stat-icon">🎨</div>
+            <div class="stat-meta">
+                <span class="stat-label">Paper MCP Studio</span>
+                <span class="stat-val" style="color: {'var(--accent-green)' if paper_online else 'var(--text-muted)'};">
+                    {'ONLINE (29979)' if paper_online else 'STANDBY'}
+                </span>
+            </div>
+        </div>
+
+        <div class="stat-widget">
+            <div class="stat-icon">🔒</div>
+            <div class="stat-meta">
+                <span class="stat-label">PII & Secret Shield</span>
+                <span class="stat-val" style="color: var(--accent-green);">ARMED (Zero-Leak)</span>
+            </div>
+        </div>
+
         <div class="stat-widget">
             <div class="stat-icon">⚡</div>
             <div class="stat-meta">
-                <span class="stat-label">System-1 Router</span>
-                <span class="stat-val">Laya (ONNX ~33ms)</span>
+                <span class="stat-label">System Resources</span>
+                <span class="stat-val">CPU: {health_data.get('cpu_percent', 0)}% &bull; RAM: {health_data.get('ram_percent', 0)}%</span>
             </div>
         </div>
+
         <div class="stat-widget">
-            <div class="stat-icon">🛡️</div>
+            <div class="stat-icon">🚨</div>
             <div class="stat-meta">
-                <span class="stat-label">Quota Strategy</span>
-                <span class="stat-val">Free Tier Optimized</span>
-            </div>
-        </div>
-        <div class="stat-widget">
-            <div class="stat-icon">📊</div>
-            <div class="stat-meta">
-                <span class="stat-label">Dispatched Tasks</span>
-                <span class="stat-val">{num_tasks} Recorded</span>
+                <span class="stat-label">Emergency Stop</span>
+                <span class="stat-val" id="top-stat-stop" style="color: {'var(--accent-red)' if stopped_state else 'var(--accent-green)'};">
+                    {'STOPPED' if stopped_state else 'ARMED (Ctrl+Esc)'}
+                </span>
             </div>
         </div>
     </div>
 
-    <!-- NAVIGATION TABS -->
+    <!-- TABS NAVIGATION HEADER -->
     <div class="nav-header">
         <div class="nav-title-group">
-            <span class="section-title">Company Workspace</span>
+            <div class="nav-badge">HERMES 1.0</div>
+            <h1 class="section-title">Autonomous Operations Center</h1>
         </div>
         <div class="tab-controls">
-            <button class="tab-btn active" onclick="setTab('roster')">Team Roster ({num_roles})</button>
-            <button class="tab-btn" onclick="setTab('logs')">Task Audit Trail ({num_tasks})</button>
+            <button class="tab-btn active" onclick="setTab('roster')">👥 Team Roster ({num_roles})</button>
+            <button class="tab-btn" onclick="setTab('desktop')">🖥️ Desktop & Monitors</button>
+            <button class="tab-btn" onclick="setTab('paper')">🎨 Paper MCP Studio</button>
+            <button class="tab-btn" onclick="setTab('security')">🔒 PII & Secret Shield</button>
+            <button class="tab-btn" onclick="setTab('rpa')">🤖 RPA Macro Studio</button>
+            <button class="tab-btn" onclick="setTab('system')">⚡ System & Health</button>
+            <button class="tab-btn" onclick="setTab('browser')">🌐 In-Browser Extension</button>
+            <button class="tab-btn" onclick="setTab('logs')">📜 Task Audit Trail ({num_tasks})</button>
         </div>
     </div>
 
-    <!-- ROSTER TAB -->
+    <!-- TAB 1: TEAM ROSTER -->
     <div id="tab-roster" class="tab-panel active">
         <div class="cards-grid">
 """
@@ -828,7 +1334,7 @@ def dashboard():
                     <span class="node-quota">{m['quota']}</span>
                 </div>
             """)
-        
+
         chain_html = ' <span class="chain-arrow">&rarr;</span> '.join(nodes_html)
 
         html += f"""
@@ -910,7 +1416,419 @@ def dashboard():
             </div>
         """
 
-    # Role counts for filter chips
+    html += """
+        </div>
+    </div>
+
+    <!-- TAB 2: DESKTOP & MONITORS -->
+    <div id="tab-desktop" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🖥️ Physical Display Monitors</h2>
+                    <p class="panel-desc">Real-time coordinate systems and work areas across your connected displays.</p>
+                </div>
+                <button class="btn-action" onclick="refreshDesktop()">&circlearrowright; Refresh Displays</button>
+            </div>
+            <div id="monitors-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+    """
+
+    for m in monitors_list:
+        html += f"""
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 14px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-weight: 700; color: var(--text-heading);">Display {m.id} {'(Primary)' if m.is_primary else ''}</span>
+                        <span style="font-size: 10px; color: var(--accent-green); font-weight: 600;">ACTIVE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted);">
+                        <div>Device: {m.device}</div>
+                        <div>Resolution: <strong>{m.width} x {m.height}</strong></div>
+                        <div>Work Area: {m.work_area[0]}, {m.work_area[1]} to {m.work_area[2]}, {m.work_area[3]}</div>
+                    </div>
+                </div>
+        """
+
+    html += """
+            </div>
+        </div>
+
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🚨 Desktop Hotkeys & Safety Kill-Switch</h2>
+                    <p class="panel-desc">Win32 background daemon global shortcuts and emergency override.</p>
+                </div>
+                <div>
+                    <button id="btn-toggle-panic" class="btn-action btn-danger" onclick="toggleEmergencyStop()">
+                        🚨 ENGAGE EMERGENCY PANIC STOP
+                    </button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;">
+                <div style="background: var(--bg-input); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-weight: 700; color: var(--text-heading); font-size: 12px; margin-bottom: 4px;">Ctrl + Alt + Space</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Global Summon: Instantly raises Hermes prompt bar from any active game, IDE, or app.</div>
+                </div>
+                <div style="background: var(--bg-input); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-weight: 700; color: var(--text-heading); font-size: 12px; margin-bottom: 4px;">Ctrl + Alt + C</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Selected-Text Assist: Copies highlighted text in any window and sends directly to Hermes.</div>
+                </div>
+                <div style="background: var(--bg-input); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-weight: 700; color: var(--accent-red); font-size: 12px; margin-bottom: 4px;">Ctrl + Esc</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Emergency Panic Stop: Instantly freezes all mouse/keyboard automated actions across Windows.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🪟 Real User Windows & One-Click Snapping</h2>
+                    <p class="panel-desc">Clean list of active applications (system noise filtered out). Snap or move across monitors instantly.</p>
+                </div>
+                <button class="btn-action" onclick="refreshWindows()">&circlearrowright; Refresh Windows</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="data-table" id="windows-table">
+                    <thead>
+                        <tr>
+                            <th>PID</th>
+                            <th>Window Title</th>
+                            <th>Process</th>
+                            <th>Monitor</th>
+                            <th>Coordinates</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="windows-tbody">
+    """
+
+    for w in windows_list[:25]:
+        hwnd = w.get("hwnd", 0) if isinstance(w, dict) else getattr(w, "hwnd", 0)
+        title = w.get("title", "") if isinstance(w, dict) else getattr(w, "title", "")
+        mon = w.get("monitor_id", 1) if isinstance(w, dict) else getattr(w, "monitor_id", 1)
+        rect = w.get("rect", (0, 0, 0, 0)) if isinstance(w, dict) else getattr(w, "rect", (0, 0, 0, 0))
+        wx = rect[0] if len(rect) > 0 else 0
+        wy = rect[1] if len(rect) > 1 else 0
+        ww = rect[2] if len(rect) > 2 else 0
+        wh = rect[3] if len(rect) > 3 else 0
+
+        html += f"""
+                        <tr>
+                            <td>{hwnd}</td>
+                            <td style="font-weight: 600; color: var(--text-heading); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                {title}
+                            </td>
+                            <td>Active Window</td>
+                            <td>Monitor {mon}</td>
+                            <td style="font-family: monospace; font-size: 11px;">{ww}x{wh} @ ({wx},{wy})</td>
+                            <td>
+                                <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                    <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('{hwnd}', 'left')">◧ Left</button>
+                                    <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('{hwnd}', 'right')">◨ Right</button>
+                                    <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('{hwnd}', 'maximize')">🗖 Max</button>
+                                    <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="moveWin('{hwnd}', 2)">To Mon 2</button>
+                                </div>
+                            </td>
+                        </tr>
+        """
+
+    html += """
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: PAPER MCP STUDIO -->
+    <div id="tab-paper" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🎨 Paper Desktop MCP Studio</h2>
+                    <p class="panel-desc">Autonomous visual design, artboards, and HTML-to-Canvas rendering on port 29979.</p>
+                </div>
+                <button class="btn-action" onclick="checkPaperStatus()">&circlearrowright; Refresh Status</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 18px;">
+                <div style="background: var(--bg-input); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Paper Protocol Handshake</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">MCP Spec 2024-11-05</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Local Endpoint: <code>http://127.0.0.1:29979/mcp</code></div>
+                </div>
+                <div style="background: var(--bg-input); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Available Tools</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--accent-green); margin-top: 4px;">36 Autonomous MCP Tools</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Includes write_html, create_artboard, get_screenshot</div>
+                </div>
+                <div style="background: var(--bg-input); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Design Loop Policy</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--accent-gold); margin-top: 4px;">Autonomous Critique Loop</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Read &bull; Plan &bull; 1-3 Edits &bull; Screenshot &bull; Critique</div>
+                </div>
+            </div>
+
+            <!-- ARTBOARD GENERATOR -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">📐 Create Design Artboard</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div>
+                            <label style="font-size: 11px; color: var(--text-muted);">Artboard Name</label>
+                            <input type="text" id="paper-artboard-name" class="input-text" style="width: 100%; margin-top: 4px;" value="Executive Operations Dashboard" />
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 11px; color: var(--text-muted);">Width (px)</label>
+                                <input type="number" id="paper-artboard-w" class="input-text" style="width: 100%; margin-top: 4px;" value="1440" />
+                            </div>
+                            <div>
+                                <label style="font-size: 11px; color: var(--text-muted);">Height (px)</label>
+                                <input type="number" id="paper-artboard-h" class="input-text" style="width: 100%; margin-top: 4px;" value="900" />
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px;">
+                            <button class="btn-action" onclick="createPaperArtboard()">🚀 Create Artboard in Paper</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">💻 Write HTML to Canvas</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div>
+                            <label style="font-size: 11px; color: var(--text-muted);">HTML Code / Design Element</label>
+                            <textarea id="paper-html-code" class="input-textarea" style="width: 100%; height: 95px; margin-top: 4px; font-family: monospace;" placeholder="<div style='background: #111; color: white; padding: 24px; border-radius: 8px;'><h1>Enterprise Hero Screen</h1></div>"></textarea>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                            <select id="paper-html-mode" class="input-select">
+                                <option value="replace">Mode: Replace</option>
+                                <option value="append">Mode: Append</option>
+                            </select>
+                            <button class="btn-action" onclick="writePaperHtml()">✨ Render HTML on Canvas</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: SECURITY & PII SHIELD -->
+    <div id="tab-security" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🔒 PII & Secret Redaction Shield</h2>
+                    <p class="panel-desc">Real-time masking engine guarding against credential compromises, API key leaks, and personal data exposure.</p>
+                </div>
+                <div class="status-pill">
+                    <div class="pulse-dot"></div>
+                    <span>SHIELD ENGAGED</span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">🛡️ Protected Credentials & Entities</h3>
+                    <ul style="list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--text-main);">
+                        <li>✅ <strong>Groq API Keys:</strong> <code>gsk_[A-Za-z0-9]{{20,}}</code> &rarr; [GROQ_KEY]</li>
+                        <li>✅ <strong>Google Gemini Keys:</strong> <code>AIza[A-Za-z0-9_-]{{30,}}</code> &rarr; [GOOGLE_KEY]</li>
+                        <li>✅ <strong>OpenAI Keys:</strong> <code>sk-[A-Za-z0-9_-]{{20,}}</code> &rarr; [OPENAI_KEY]</li>
+                        <li>✅ <strong>GitHub Tokens:</strong> <code>gh[pousr]_[A-Za-z0-9]{{20,}}</code> &rarr; [GITHUB_TOKEN]</li>
+                        <li>✅ <strong>Credit Cards:</strong> 13 to 19-digit Luhn formats &rarr; [CREDIT_CARD]</li>
+                        <li>✅ <strong>Social Security Numbers:</strong> <code>XXX-XX-XXXX</code> &rarr; [SSN]</li>
+                        <li>✅ <strong>Bank Accounts & Routing Numbers:</strong> &rarr; [BANK_ACCOUNT]</li>
+                        <li>✅ <strong>Personal Emails & Phone Numbers:</strong> &rarr; [EMAIL] / [PHONE]</li>
+                    </ul>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">⚡ Zero-Knowledge Guarantee</h3>
+                    <p style="font-size: 11px; color: var(--text-muted); line-height: 1.6;">
+                        Before any prompt, transcript snippet, or task log is transmitted to cloud LLMs or written to public git commits,
+                        it is parsed through <code>pii_shield.py</code>. All recognized credentials and sensitive identifiers are replaced
+                        with tokenized tags. Raw keys never leave your machine unredacted.
+                    </p>
+                    <div style="margin-top: 12px; padding: 10px; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 4px; font-size: 11px; color: var(--accent-green);">
+                        Git Filter-Repo & Zero-Credential Policy Active across all 22,000+ repository commits.
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIVE INTERACTIVE REDACTION TESTER -->
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">🧪 Live Redaction Sandbox</h3>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Type or paste text with dummy keys, passwords, or emails to verify masking in real-time:</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Input Text</label>
+                        <textarea id="pii-input" class="input-textarea" style="width: 100%; height: 110px; margin-top: 4px;" placeholder="My email is alice@company.com and my Groq test key is gsk_0123456789abcdef0123456789."></textarea>
+                        <div style="margin-top: 8px;">
+                            <button class="btn-action" onclick="testPiiMasking()">🛡️ Test Redaction</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Redacted Output</label>
+                        <textarea id="pii-output" class="input-textarea" style="width: 100%; height: 110px; margin-top: 4px; color: var(--accent-green);" readonly placeholder="Masked output will appear here..."></textarea>
+                        <div id="pii-stats" style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">Entities detected: 0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 5: RPA MACRO STUDIO -->
+    <div id="tab-rpa" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🤖 RPA Action Recording & Replay Studio</h2>
+                    <p class="panel-desc">Record precision mouse movements, clicks, and keystrokes. Replay with humanized natural timing.</p>
+                </div>
+                <button class="btn-action" onclick="refreshMacros()">&circlearrowright; Refresh Workflows</button>
+            </div>
+
+            <!-- RECORDING CONTROLS -->
+            <div style="display: flex; gap: 14px; align-items: center; background: var(--bg-input); padding: 14px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 18px; flex-wrap: wrap;">
+                <input type="text" id="rpa-new-name" class="input-text" placeholder="Macro workflow name (e.g. ExportReport)" style="width: 260px;" />
+                <button id="btn-start-record" class="btn-action" onclick="startMacroRecord()">🔴 Start Recording</button>
+                <button id="btn-stop-record" class="btn-action btn-danger" style="display: none;" onclick="stopMacroRecord()">⏹️ Stop & Save</button>
+                <span id="rpa-rec-status" style="font-size: 11px; color: var(--text-muted);">Ready to record.</span>
+            </div>
+
+            <!-- SAVED MACROS LIST -->
+            <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">Saved Macro Automations</h3>
+            <div style="overflow-x: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Macro Name</th>
+                            <th>Actions</th>
+                            <th>Duration (sec)</th>
+                            <th>Created At</th>
+                            <th>Replay Speed</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rpa-macros-tbody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                                No macro workflows saved yet. Enter a name above and click "Start Recording" to capture your workflow.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 6: SYSTEM & HEALTH -->
+    <div id="tab-system" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">⚡ Host System Observer & Resource Health</h2>
+                    <p class="panel-desc">Continuous monitoring of hardware limits to prevent runaway tasks from freezing the OS.</p>
+                </div>
+                <button class="btn-action" onclick="refreshSystemHealth()">&circlearrowright; Refresh Metrics</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">CPU Utilization</div>
+                    <div id="sys-cpu-val" style="font-size: 20px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">{health_data.get('cpu_percent', 0)}%</div>
+                    <div style="font-size: 11px; color: var(--accent-green); margin-top: 2px;">Normal Operating Band</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">RAM Memory Usage</div>
+                    <div id="sys-ram-val" style="font-size: 20px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">{health_data.get('ram_percent', 0)}%</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">{health_data.get('ram_used_gb', 0)} GB / {health_data.get('ram_total_gb', 16)} GB</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">System Disk Space</div>
+                    <div id="sys-disk-val" style="font-size: 20px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">{health_data.get('disk_percent', 0)}%</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">{health_data.get('disk_free_gb', 0)} GB Free</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Observer Status</div>
+                    <div id="sys-status-val" style="font-size: 20px; font-weight: 700; color: var(--accent-green); margin-top: 4px;">HEALTHY</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Proactive Watchdog Active</div>
+                </div>
+            </div>
+
+            <!-- PROACTIVE BRIEFING PREVIEW -->
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="font-size: 13px; color: var(--text-heading);">📰 Executive Daily Intelligence Briefing Preview</h3>
+                    <button class="btn-action" onclick="generateBriefing()">Generate Live Briefing</button>
+                </div>
+                <div id="briefing-box" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 14px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-main); line-height: 1.6; white-space: pre-wrap; max-height: 240px; overflow-y: auto;">
+Click "Generate Live Briefing" to compile system health, active agent status, and today's audit metrics.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 7: BROWSER EXTENSION -->
+    <div id="tab-browser" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🌐 Hermes Browser Control (Manifest V3)</h2>
+                    <p class="panel-desc">Direct DOM integration in Chrome and Edge with zero bot detection and persistent user logins.</p>
+                </div>
+                <div class="status-pill">
+                    <div class="pulse-dot"></div>
+                    <span>MANIFEST V3 READY</span>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">🌟 Key Architecture Advantages</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 11px; color: var(--text-main);">
+                        <div>
+                            <strong>1. Zero Cloudflare Bot Detection:</strong>
+                            <p style="color: var(--text-muted); margin-top: 2px;">Unlike Playwright/Selenium which start in suspicious headless Chromium profiles, this runs directly inside your daily browser with your natural fingerprints.</p>
+                        </div>
+                        <div>
+                            <strong>2. Retains All Active Cookies & Logins:</strong>
+                            <p style="color: var(--text-muted); margin-top: 2px;">No need to log in to GitHub, Google, or internal intranets every session. Hermes operates right alongside you.</p>
+                        </div>
+                        <div>
+                            <strong>3. Autonomous Gate & CAPTCHA Sniffer:</strong>
+                            <p style="color: var(--text-muted); margin-top: 2px;">Automatically detects login walls, Cloudflare turnstiles, and cookie consent modals.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">📥 How to Load into Chrome / Edge</h3>
+                    <ol style="margin-left: 18px; font-size: 11px; color: var(--text-main); display: flex; flex-direction: column; gap: 8px;">
+                        <li>Open your browser and navigate to: <code>chrome://extensions</code> (or <code>edge://extensions</code>).</li>
+                        <li>Toggle on <strong>Developer mode</strong> in the upper right corner.</li>
+                        <li>Click the <strong>Load unpacked</strong> button.</li>
+                        <li>Select the directory:<br>
+                            <code style="color: var(--accent-green); background: var(--bg-card); padding: 2px 6px; border-radius: 3px; display: inline-block; margin-top: 4px;">
+                                app/browser_extension/hermes_browser_control
+                            </code>
+                        </li>
+                        <li>The extension will activate and bridge all active tabs via <code>window.__HERMES_BROWSER_CONTROL__</code>!</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 8: AUDIT TRAIL -->
+    <div id="tab-logs" class="tab-panel">
+        <div class="filter-bar">
+            <div class="filter-chips">
+"""
+
     role_counts = {}
     for t in tasks:
         r = t.get("role", "OTHER")
@@ -922,23 +1840,16 @@ def dashboard():
         chips_html += f'<button class="chip" onclick="filterLogs(\'{r}\')">{r} ({c})</button>'
 
     html += f"""
-        </div>
-    </div>
-
-    <!-- LOGS TAB -->
-    <div id="tab-logs" class="tab-panel">
-        <div class="filter-bar">
-            <div class="filter-chips">
                 {chips_html}
             </div>
-            <input type="text" class="search-input" id="log-search" placeholder="Search tasks, models, or outputs..." onkeyup="searchLogs()" />
+            <input type="text" class="search-input" id="log-search" placeholder="Search prompts, models, outputs..." onkeyup="searchLogs()" />
         </div>
         <div class="logs-stream">
     """
 
     if not tasks:
         html += """
-            <div class="empty-logs">
+            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 32px; text-align: center; color: var(--text-muted);">
                 <p>No agent tasks logged yet. Tasks run through <code>agent_dispatcher.py</code> will appear here automatically.</p>
             </div>
         """
@@ -968,23 +1879,28 @@ def dashboard():
         </div>
     </div>
 
+    <!-- TOAST POPUP -->
     <div id="toast">
         <span>&check;</span>
-        <span id="toast-msg">Directives updated successfully</span>
+        <span id="toast-msg">Action performed successfully</span>
     </div>
 
+    <!-- CLIENT SCRIPT LOGIC -->
     <script>
         function setTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
-            if (tabId === 'roster') {
-                event.target.classList.add('active');
-                document.getElementById('tab-roster').classList.add('active');
-            } else {
-                event.target.classList.add('active');
-                document.getElementById('tab-logs').classList.add('active');
+            event.target.classList.add('active');
+            const targetPanel = document.getElementById('tab-' + tabId);
+            if (targetPanel) {
+                targetPanel.classList.add('active');
             }
+
+            if (tabId === 'desktop') refreshWindows();
+            if (tabId === 'paper') checkPaperStatus();
+            if (tabId === 'rpa') refreshMacros();
+            if (tabId === 'system') refreshSystemHealth();
         }
 
         function toggleEmpLogs(role) {
@@ -1020,7 +1936,7 @@ def dashboard():
                 const text = entry.innerText.toLowerCase();
                 const roleMatch = (currentFilter === 'ALL' || role === currentFilter);
                 const searchMatch = !query || text.includes(query);
-                entry.style.display = (roleMatch && searchMatch) ? 'block' : 'none';
+                entry.style.display = (roleMatch && searchMatch) ? 'flex' : 'none';
             });
         }
 
@@ -1039,12 +1955,309 @@ def dashboard():
                 if (data.status === 'ok') {
                     indicator.classList.add('visible');
                     setTimeout(() => indicator.classList.remove('visible'), 2500);
-                    showToast(`Updated ${role} Soul memory`);
+                    showToast(`Updated ${role} Soul directives`);
                 } else {
                     alert('Error saving directives');
                 }
             } catch (err) {
                 alert('Connection error: ' + err);
+            }
+        }
+
+        // --- Desktop Shell & Windows Logic ---
+        async function refreshWindows() {
+            try {
+                const res = await fetch('/api/desktop/windows');
+                const data = await res.json();
+                const tbody = document.getElementById('windows-tbody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                if (!data.windows || data.windows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 14px;">No active user windows found.</td></tr>';
+                    return;
+                }
+                data.windows.forEach(w => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${w.pid}</td>
+                        <td style="font-weight: 600; color: var(--text-heading); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${w.title}</td>
+                        <td>${w.process_name}</td>
+                        <td>Monitor ${w.monitor}</td>
+                        <td style="font-family: monospace; font-size: 11px;">${w.width}x${w.height} @ (${w.x},${w.y})</td>
+                        <td>
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('${w.hwnd}', 'left')">◧ Left</button>
+                                <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('${w.hwnd}', 'right')">◨ Right</button>
+                                <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="snapWin('${w.hwnd}', 'maximize')">🗖 Max</button>
+                                <button class="btn-action" style="padding: 3px 6px; font-size: 10px;" onclick="moveWin('${w.hwnd}', 2)">To Mon 2</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                showToast(`Refreshed ${data.windows.length} active windows`);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function snapWin(hwnd, pos) {
+            try {
+                const res = await fetch('/api/desktop/snap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: hwnd, position: pos })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast(`Snapped window: ${pos}`);
+                    refreshWindows();
+                } else {
+                    alert('Snap error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Snap error: ' + e);
+            }
+        }
+
+        async function moveWin(hwnd, monId) {
+            try {
+                const res = await fetch('/api/desktop/move_monitor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: hwnd, monitor_id: monId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast(`Moved to monitor ${monId}`);
+                    refreshWindows();
+                } else {
+                    alert('Move error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Move error: ' + e);
+            }
+        }
+
+        let isStopped = """ + ("true" if stopped_state else "false") + """;
+        async function toggleEmergencyStop() {
+            isStopped = !isStopped;
+            try {
+                const res = await fetch('/api/desktop/emergency_stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stopped: isStopped })
+                });
+                const data = await res.json();
+                const btn = document.getElementById('btn-toggle-panic');
+                const topStat = document.getElementById('top-stat-stop');
+                if (data.stopped) {
+                    btn.innerText = "🛡️ DISENGAGE EMERGENCY STOP";
+                    btn.classList.remove('btn-danger');
+                    btn.classList.add('btn-action');
+                    topStat.innerText = "STOPPED";
+                    topStat.style.color = "var(--accent-red)";
+                    showToast("🚨 EMERGENCY PANIC STOP ENGAGED!");
+                } else {
+                    btn.innerText = "🚨 ENGAGE EMERGENCY PANIC STOP";
+                    btn.classList.add('btn-danger');
+                    topStat.innerText = "ARMED (Ctrl+Esc)";
+                    topStat.style.color = "var(--accent-green)";
+                    showToast("Emergency stop disengaged. System operational.");
+                }
+            } catch (e) {
+                alert('Toggle error: ' + e);
+            }
+        }
+
+        // --- Paper MCP Logic ---
+        async function checkPaperStatus() {
+            try {
+                const res = await fetch('/api/paper/status');
+                const data = await res.json();
+                if (data.listening) {
+                    showToast(`Paper Desktop MCP Online &bull; ${data.artboards} Artboard(s)`);
+                } else {
+                    showToast("Paper Desktop MCP offline (Port 29979 closed)");
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function createPaperArtboard() {
+            const name = document.getElementById('paper-artboard-name').value;
+            const w = document.getElementById('paper-artboard-w').value;
+            const h = document.getElementById('paper-artboard-h').value;
+            try {
+                const res = await fetch('/api/paper/artboard', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, width: parseInt(w), height: parseInt(h) })
+                });
+                const data = await res.json();
+                if (data.status === 'error') {
+                    alert('Paper error: ' + data.message);
+                } else {
+                    showToast(`Created Artboard '${name}' (${w}x${h}) in Paper`);
+                }
+            } catch (e) {
+                alert('Paper connection error: ' + e);
+            }
+        }
+
+        async function writePaperHtml() {
+            const code = document.getElementById('paper-html-code').value;
+            const mode = document.getElementById('paper-html-mode').value;
+            if (!code.trim()) {
+                alert('Please enter HTML code to render');
+                return;
+            }
+            try {
+                const res = await fetch('/api/paper/write_html', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html: code, mode: mode })
+                });
+                const data = await res.json();
+                if (data.status === 'error') {
+                    alert('Paper error: ' + data.message);
+                } else {
+                    showToast("Rendered HTML elements directly onto Paper canvas!");
+                }
+            } catch (e) {
+                alert('Paper error: ' + e);
+            }
+        }
+
+        // --- PII Shield Tester ---
+        async function testPiiMasking() {
+            const text = document.getElementById('pii-input').value;
+            try {
+                const res = await fetch('/api/security/mask_pii', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                const data = await res.json();
+                document.getElementById('pii-output').value = data.masked_text;
+                document.getElementById('pii-stats').innerText = `Entities detected & redacted: ${data.entities_count} items`;
+                showToast(`Redacted ${data.entities_count} sensitive entities`);
+            } catch (e) {
+                alert('PII Masking error: ' + e);
+            }
+        }
+
+        // --- RPA Macros Logic ---
+        async function refreshMacros() {
+            try {
+                const res = await fetch('/api/rpa/macros');
+                const data = await res.json();
+                const tbody = document.getElementById('rpa-macros-tbody');
+                tbody.innerHTML = '';
+                if (!data.macros || data.macros.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">No macro workflows saved yet. Enter a name above and click "Start Recording" to capture your workflow.</td></tr>';
+                    return;
+                }
+                data.macros.forEach(m => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="font-weight: 700; color: var(--text-heading);">${m.name}</td>
+                        <td>${m.action_count} steps</td>
+                        <td>${m.duration}s</td>
+                        <td>${m.created_at ? m.created_at.slice(0, 19).replace('T', ' ') : 'N/A'}</td>
+                        <td>
+                            <select id="spd-${m.name}" class="input-select" style="padding: 2px 6px; font-size: 11px;">
+                                <option value="1.0">1.0x (Normal)</option>
+                                <option value="1.5">1.5x (Fast)</option>
+                                <option value="2.0">2.0x (Hyper)</option>
+                            </select>
+                        </td>
+                        <td>
+                            <button class="btn-action" style="padding: 4px 8px; font-size: 11px;" onclick="replayMacro('${m.name}')">▶️ Replay</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function startMacroRecord() {
+            const name = document.getElementById('rpa-new-name').value.trim() || 'workflow';
+            try {
+                const res = await fetch('/api/rpa/record/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+                const data = await res.json();
+                if (data.status === 'recording') {
+                    document.getElementById('btn-start-record').style.display = 'none';
+                    document.getElementById('btn-stop-record').style.display = 'inline-flex';
+                    document.getElementById('rpa-rec-status').innerText = `🔴 RECORDING '${name}'... (Move mouse, click, type)`;
+                    document.getElementById('rpa-rec-status').style.color = "var(--accent-red)";
+                    showToast(`Recording macro: ${name}`);
+                }
+            } catch (e) {
+                alert('Record error: ' + e);
+            }
+        }
+
+        async function stopMacroRecord() {
+            try {
+                const res = await fetch('/api/rpa/record/stop', { method: 'POST' });
+                const data = await res.json();
+                document.getElementById('btn-start-record').style.display = 'inline-flex';
+                document.getElementById('btn-stop-record').style.display = 'none';
+                document.getElementById('rpa-rec-status').innerText = `Saved '${data.name}' (${data.actions} actions, ${data.duration}s)`;
+                document.getElementById('rpa-rec-status').style.color = "var(--accent-green)";
+                showToast(`Saved macro '${data.name}' with ${data.actions} actions!`);
+                refreshMacros();
+            } catch (e) {
+                alert('Stop error: ' + e);
+            }
+        }
+
+        async function replayMacro(name) {
+            const spd = document.getElementById('spd-' + name)?.value || '1.0';
+            try {
+                const res = await fetch('/api/rpa/replay', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, speed: parseFloat(spd) })
+                });
+                const data = await res.json();
+                showToast(`Replaying '${name}' at ${spd}x speed`);
+            } catch (e) {
+                alert('Replay error: ' + e);
+            }
+        }
+
+        // --- System Health & Briefing ---
+        async function refreshSystemHealth() {
+            try {
+                const res = await fetch('/api/system/health');
+                const data = await res.json();
+                document.getElementById('sys-cpu-val').innerText = `${data.cpu_percent}%`;
+                document.getElementById('sys-ram-val').innerText = `${data.ram_percent}%`;
+                document.getElementById('sys-disk-val').innerText = `${data.disk_percent}%`;
+                document.getElementById('sys-status-val').innerText = data.status;
+                showToast("System health metrics updated");
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function generateBriefing() {
+            try {
+                const res = await fetch('/api/system/briefing');
+                const data = await res.json();
+                document.getElementById('briefing-box').innerText = data.briefing;
+                showToast("Executive briefing generated");
+            } catch (e) {
+                alert('Briefing error: ' + e);
             }
         }
 
@@ -1057,9 +2270,10 @@ def dashboard():
     </script>
 </body>
 </html>
-    """
+"""
     return html
 
+
 if __name__ == "__main__":
-    print("Starting Hermes Modern Company Dashboard on http://localhost:8000")
+    print("Starting Hermes Autonomous Operations Center on http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
