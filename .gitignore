@@ -19,6 +19,10 @@ act/
 .env.production.local
 .env.development
 .env.test
+*.key
+*.token
+credentials.json
+local_model_lab/*.key*
 .hermes-docker/
 .notebooklm-home/
 .notebooklm-cli-venv/
