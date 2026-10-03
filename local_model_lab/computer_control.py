@@ -17,7 +17,23 @@ import urllib.parse
 import subprocess
 import re
 import ctypes
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple, Union
+
+try:
+    from accessibility_tree import get_accessibility_tree, UIElement
+except ImportError:
+    try:
+        from local_model_lab.accessibility_tree import get_accessibility_tree, UIElement
+    except ImportError:
+        get_accessibility_tree = None
+
+try:
+    from screen_vision import get_screen_vision
+except ImportError:
+    try:
+        from local_model_lab.screen_vision import get_screen_vision
+    except ImportError:
+        get_screen_vision = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. HARDLINE SAFETY POLICIES & GUARDS
@@ -568,6 +584,133 @@ def get_desktop_environment_state() -> Dict[str, Any]:
         }
     }
 
+
+def click_ui_element(target: str, window: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Clicks an interactive UI element by name/description using:
+    1. Windows UI Automation (Accessibility Tree) - fast, exact, 100% deterministic
+    2. Vision Grounding (OmniParser/Vision Model) - fallback for canvas/custom UI
+    """
+    audit_action_safety("click_ui_element", target)
+
+    # 1. Try Windows Accessibility Tree (UIA)
+    if get_accessibility_tree:
+        tree = get_accessibility_tree()
+        elem = tree.find_by_description(target, window=window)
+        if not elem:
+            elem = tree.find_element(name=target, window=window, fuzzy=True)
+
+        if elem:
+            success, msg = tree.click_element(elem)
+            return {
+                "status": "success" if success else "error",
+                "strategy": "accessibility_tree",
+                "element": elem.to_dict(),
+                "message": msg
+            }
+
+    # 2. Fallback to Screen Vision Grounding
+    if get_screen_vision:
+        vision = get_screen_vision()
+        match = vision.locate_element(target)
+        if match and match.get("found"):
+            cx, cy = match["center"]
+            res = mouse_click(x=cx, y=cy)
+            return {
+                "status": "success",
+                "strategy": "vision_grounding",
+                "target": target,
+                "center": [cx, cy],
+                "mouse_result": res,
+                "message": f"Located '{target}' visually and clicked at ({cx}, {cy})"
+            }
+
+    return {
+        "status": "not_found",
+        "target": target,
+        "message": f"Could not find element '{target}' via Accessibility Tree or Vision Grounding."
+    }
+
+
+def type_into_ui_element(target_field: str, text: str, window: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Finds an editable field via UI Automation and sets or types its value.
+    """
+    audit_action_safety("type_into_ui_element", f"{target_field}: {text}")
+
+    # 1. Try Windows Accessibility Tree (UIA)
+    if get_accessibility_tree:
+        tree = get_accessibility_tree()
+        elem = tree.find_by_description(target_field, window=window)
+        if not elem:
+            elem = tree.find_element(name=target_field, control_type="Edit", window=window, fuzzy=True)
+
+        if elem:
+            success, msg = tree.set_value(elem, text)
+            return {
+                "status": "success" if success else "error",
+                "strategy": "accessibility_tree",
+                "element": elem.to_dict(),
+                "message": msg
+            }
+
+    # 2. Fallback: focus window and type
+    if window:
+        focus_window_by_title(window)
+    return type_text_into_active_window(text)
+
+
+def inspect_screen_with_vision(prompt: str = "Describe what is currently visible on my screen.") -> Dict[str, Any]:
+    """
+    Captures screenshot and analyzes visual layout and content with the vision model.
+    """
+    audit_action_safety("inspect_screen_with_vision", prompt)
+    windows = list_desktop_windows()
+    active_win = windows[0]["title"] if windows else "Desktop"
+
+    vision_text = ""
+    if get_screen_vision:
+        vision_text = get_screen_vision().describe_screen(prompt)
+    else:
+        vision_text = "Screen vision engine is not initialized."
+
+    controls_summary = {}
+    if get_accessibility_tree:
+        elems = get_accessibility_tree().get_window_elements(max_depth=4)
+        clickable_count = sum(1 for e in elems if e.is_clickable)
+        input_count = sum(1 for e in elems if e.is_input)
+        controls_summary = {
+            "total_accessible_elements": len(elems),
+            "clickable_controls": clickable_count,
+            "input_fields": input_count,
+            "sample_controls": [f"[{e.control_type}] {e.name}" for e in elems[:8] if e.name]
+        }
+
+    return {
+        "status": "success",
+        "active_window": active_win,
+        "vision_description": vision_text,
+        "ui_controls_summary": controls_summary
+    }
+
+
+def list_window_controls(window_query: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Returns all interactive controls (buttons, inputs, tabs, checkboxes) in the target window.
+    """
+    if not get_accessibility_tree:
+        return {"status": "error", "message": "Accessibility tree not available"}
+
+    tree = get_accessibility_tree()
+    elements = tree.get_window_elements(target_window=window_query, max_depth=6)
+    interactive = [e.to_dict() for e in elements if (e.is_clickable or e.is_input or e.name)]
+    return {
+        "status": "success",
+        "target_window": window_query or "foreground",
+        "total_controls": len(interactive),
+        "controls": interactive[:30]
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. TELEGRAM CONFIRMATION HANDLER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -606,6 +749,30 @@ def execute_computer_task(task_prompt: str) -> Dict[str, Any]:
         }
 
     task_lower = task_prompt.lower()
+
+    # 0. Screen Vision & UI Inspection
+    if any(k in task_lower for k in ("what is on my screen", "inspect screen", "describe screen", "look at screen", "read screen")):
+        return inspect_screen_with_vision(task_prompt)
+
+    # 0b. List Window Controls
+    if "list controls" in task_lower or "window controls" in task_lower or "inspect controls" in task_lower:
+        match = re.search(r'(?:in|for)\s+(?:window\s+|app\s+)?["\']?([^"\']+)["\']?$', task_prompt, re.IGNORECASE)
+        win = match.group(1).strip() if match else None
+        return list_window_controls(window_query=win)
+
+    # 0c. UIA / Vision Element Clicking
+    if "click button" in task_lower or "click on" in task_lower or "click element" in task_lower or (task_lower.startswith("click ") and not ("mouse click" in task_lower or "click at" in task_lower)):
+        target = re.sub(r'^(click\s+button|click\s+on\s+button|click\s+on|click\s+element|click)\s+', '', task_prompt, flags=re.IGNORECASE)
+        target = re.sub(r'\s+button$', '', target, flags=re.IGNORECASE).strip(' "\'')
+        return click_ui_element(target)
+
+    # 0d. UIA / Vision Typing into Field
+    if "type " in task_lower and (" into " in task_lower or " in " in task_lower):
+        match = re.search(r'type\s+["\']?(.*?)["\']?\s+(?:into|in)\s+["\']?(.*?)["\']?$', task_prompt, re.IGNORECASE)
+        if match:
+            text_to_type = match.group(1).strip()
+            target_field = match.group(2).strip()
+            return type_into_ui_element(target_field, text_to_type)
 
     # 1. Paper Design Actions
     if "paper" in task_lower and ("design" in task_lower or "artboard" in task_lower or "draw" in task_lower or "create" in task_lower):
