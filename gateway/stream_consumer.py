@@ -685,18 +685,21 @@ class GatewayStreamConsumer:
             if isinstance(self.adapter, _BasePlatformAdapter)
             else len
         )
+        # Resolve native draft streaming before choosing the overflow budget.
+        # Rich-capable adapters can raise that budget only for native drafts:
+        # progressive edits remain subject to the adapter's legacy limit.
+        self._use_draft_streaming = self._resolve_draft_streaming()
         # Rich-capable adapters (Telegram rich messages) raise this above the
-        # legacy per-message limit so a reply that fits one rich send/draft
-        # isn't fragmented at 4096 while streaming.  See _raw_message_limit.
+        # legacy per-message limit so a reply that fits one rich draft/final
+        # send isn't fragmented at 4096 while draft-streaming. See
+        # _raw_message_limit.
         _raw_limit = self._raw_message_limit()
         _safe_limit = max(500, _raw_limit - _len_fn(self.cfg.cursor) - 100)
 
-        # Resolve native draft streaming once per run.  When enabled the
-        # consumer routes mid-stream frames through adapter.send_draft and
-        # leaves _message_id=None so the existing got_done path delivers the
-        # final answer as a regular sendMessage (drafts have no message_id
-        # to edit).
-        self._use_draft_streaming = self._resolve_draft_streaming()
+        # When native draft streaming is enabled the consumer routes mid-stream
+        # frames through adapter.send_draft and leaves _message_id=None so the
+        # existing got_done path delivers the final answer as a regular
+        # sendMessage (drafts have no message_id to edit).
         if self._use_draft_streaming:
             type(self)._draft_id_counter += 1
             self._draft_id = type(self)._draft_id_counter
@@ -829,7 +832,9 @@ class GatewayStreamConsumer:
                         chunks_delivered = False
                         reply_to = self._initial_reply_to_id
                         all_heads_delivered = len(chunks) > 1
+                        sealed_head_ids: "set[str]" = set()
                         for chunk in chunks[:-1]:
+                            tracked_before = set(self._preview_message_ids)
                             new_id = await self._send_new_chunk(
                                 chunk,
                                 reply_to,
@@ -843,9 +848,22 @@ class GatewayStreamConsumer:
                                 chunks_delivered = False
                                 break
                             chunks_delivered = True
+                            sealed_head_ids.update(
+                                self._preview_message_ids - tracked_before
+                            )
                             reply_to = new_id
 
                         if all_heads_delivered:
+                            # These head chunks are now final visible content,
+                            # not replaceable previews.  Leaving them tracked
+                            # would let a later fresh-final of only the active
+                            # tail delete the heads and truncate the answer.
+                            self._preview_message_ids.difference_update(
+                                sealed_head_ids
+                            )
+                            self._segment_preview_message_ids.difference_update(
+                                sealed_head_ids
+                            )
                             self._accumulated = chunks[-1]
                             # The head chunks are sealed.  Clear the edit target
                             # so the remaining tail is sent as a fresh active
@@ -924,6 +942,12 @@ class GatewayStreamConsumer:
                             # fallback final-send path can deliver the remaining
                             # continuation without dropping content.
                             break
+                        # The finalized head must survive any fresh-final of the
+                        # active tail that follows.
+                        self._preview_message_ids.difference_update(
+                            self._segment_preview_message_ids
+                        )
+                        self._segment_preview_message_ids = set()
                         self._accumulated = self._accumulated[split_at:].lstrip("\n")
                         self._message_id = None
                         self._last_sent_text = ""
@@ -1768,7 +1792,9 @@ class GatewayStreamConsumer:
         base = getattr(self.adapter, "MAX_MESSAGE_LENGTH", 4096)
         # isinstance gate: MagicMock adapters return mock objects (truthy, not
         # ints) for arbitrary attribute access — keep them on the base limit.
-        if isinstance(self.adapter, _BasePlatformAdapter):
+        # Edit-based streaming must also stay on the legacy limit: rich send
+        # endpoints can accept more text, but progressive edit endpoints cannot.
+        if isinstance(self.adapter, _BasePlatformAdapter) and self._use_draft_streaming:
             try:
                 base = self.adapter.max_message_length_for_chat(self.chat_id)
             except Exception as e:

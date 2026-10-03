@@ -140,6 +140,7 @@ class ExaWebSearchProvider(WebSearchProvider):
                         "url": result.url or "",
                         "title": result.title or "",
                         "description": " ".join(highlights) if highlights else "",
+                        "published_at": getattr(result, "published_date", None) or "",
                         "position": i + 1,
                     }
                 )
@@ -183,7 +184,11 @@ class ExaWebSearchProvider(WebSearchProvider):
                         "title": title,
                         "content": content,
                         "raw_content": content,
-                        "metadata": {"sourceURL": url, "title": title},
+                        "metadata": {
+                            "sourceURL": url,
+                            "title": title,
+                            "published_at": getattr(result, "published_date", None) or "",
+                        },
                     }
                 )
             return results

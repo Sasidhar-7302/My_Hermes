@@ -13,6 +13,7 @@ isinstance(BasePlatformAdapter) gate excludes plain MagicMocks.
 from __future__ import annotations
 
 import asyncio
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -430,19 +431,26 @@ def _make_rich_capable_adapter(*, overflow_limit=32768, send_results=None):
 
 
 class TestRichAwareOverflow:
-    """Rich-capable adapters raise the consumer's overflow limit so a reply that
-    fits one rich message isn't fragmented at the legacy 4,096 edit limit."""
+    """Rich-capable adapters raise the overflow limit only for native drafts."""
 
     def test_raw_message_limit_uses_adapter_rich_cap(self):
         adapter = _make_rich_capable_adapter(overflow_limit=32768)
         consumer = GatewayStreamConsumer(adapter, "12345", StreamConsumerConfig())
+        consumer._use_draft_streaming = True
         assert consumer._raw_message_limit() == 32768
+
+    def test_raw_message_limit_uses_legacy_cap_for_edit_transport(self):
+        adapter = _make_rich_capable_adapter(overflow_limit=32768)
+        consumer = GatewayStreamConsumer(adapter, "12345", StreamConsumerConfig())
+        consumer._use_draft_streaming = False
+        assert consumer._raw_message_limit() == 4096
 
     def test_raw_message_limit_falls_back_to_max_length(self):
         # Adapter whose hook returns None (default) keeps the legacy limit.
         adapter = _make_rich_capable_adapter()
         adapter.streaming_overflow_limit = lambda: None
         consumer = GatewayStreamConsumer(adapter, "12345", StreamConsumerConfig())
+        consumer._use_draft_streaming = True
         assert consumer._raw_message_limit() == 4096
 
     def test_raw_message_limit_mock_adapter_is_safe(self):
@@ -454,12 +462,13 @@ class TestRichAwareOverflow:
         assert consumer._raw_message_limit() == 4096
 
     @pytest.mark.asyncio
-    async def test_long_rich_reply_not_split_and_final_is_whole(self):
+    async def test_long_edit_reply_splits_and_finalizes_only_active_tail(self):
         from gateway.platforms.base import SendResult
 
         long_text = "x" * 5000  # > 4096 legacy limit, < 32768 rich limit
         adapter = _make_rich_capable_adapter(send_results=[
             SendResult(success=True, message_id="preview1"),
+            SendResult(success=True, message_id="preview2"),
             SendResult(success=True, message_id="final1"),
         ])
         cfg = StreamConsumerConfig(
@@ -475,13 +484,85 @@ class TestRichAwareOverflow:
         consumer.finish()
         await task
 
-        # Exactly two whole sends: the preview and the fresh final — NOT split
-        # into ~4096 chunks. Both carry the full 5,000-char reply.
-        assert adapter.send.await_count == 2
-        assert adapter.send.call_args_list[0].kwargs.get("content") == long_text
-        assert adapter.send.call_args_list[1].kwargs.get("content") == long_text
+        # Edit-based previews stay below the legacy cap. The sealed head remains
+        # visible while fresh-final replaces only the active tail; re-sending
+        # the whole answer here would duplicate the head.
+        assert adapter.send.await_count == 3
+        preview_contents = [
+            call.kwargs.get("content") for call in adapter.send.call_args_list[:-1]
+        ]
+        assert all(len(content) <= 4096 for content in preview_contents)
+        preview_payloads = [
+            re.sub(r" \(\d+/\d+\)$", "", content) for content in preview_contents
+        ]
+        assert "".join(preview_payloads) == long_text
+        assert (
+            adapter.send.call_args_list[-1].kwargs.get("content")
+            == preview_contents[-1]
+        )
         adapter.edit_message.assert_not_called()
-        adapter.delete_message.assert_awaited_once_with("12345", "preview1")
+        deleted = {call.args[1] for call in adapter.delete_message.await_args_list}
+        assert deleted == {"preview2"}
+        assert consumer.final_response_sent is True
+
+    @pytest.mark.asyncio
+    async def test_long_draft_reply_uses_rich_overflow_cap(self):
+        long_text = "x" * 5000  # > 4096 legacy limit, < 32768 rich limit
+        adapter = _make_draft_capable_adapter()
+        adapter.streaming_overflow_limit = lambda: 32768
+        cfg = StreamConsumerConfig(
+            transport="auto", chat_type="dm",
+            edit_interval=0.01, buffer_threshold=5, cursor="",
+        )
+        consumer = GatewayStreamConsumer(adapter, "12345", cfg)
+
+        consumer.on_delta(long_text)
+        task = asyncio.create_task(consumer.run())
+        await asyncio.sleep(0.05)
+        consumer.finish()
+        await task
+
+        assert adapter.draft_calls
+        assert adapter.draft_calls[-1]["content"] == long_text
+        adapter.send.assert_awaited_once()
+        assert adapter.send.call_args.kwargs.get("content") == long_text
+
+    @pytest.mark.asyncio
+    async def test_existing_preview_split_keeps_finalized_head(self):
+        from gateway.platforms.base import SendResult
+
+        adapter = _make_rich_capable_adapter(send_results=[
+            SendResult(success=True, message_id="preview1"),
+            SendResult(success=True, message_id="preview2"),
+            SendResult(success=True, message_id="final1"),
+        ])
+        preference_checks = 0
+
+        def _prefer_fresh_final(content, metadata=None):
+            nonlocal preference_checks
+            preference_checks += 1
+            # Finalize the overflow head in-place, then fresh-finalize only the
+            # active tail. This exercises the existing-preview split path.
+            return preference_checks > 1
+
+        adapter.prefers_fresh_final_streaming = _prefer_fresh_final
+        cfg = StreamConsumerConfig(
+            transport="auto", chat_type="dm",
+            edit_interval=0.01, buffer_threshold=5, cursor="",
+        )
+        consumer = GatewayStreamConsumer(adapter, "12345", cfg)
+
+        consumer.on_delta("x" * 3000)
+        task = asyncio.create_task(consumer.run())
+        await asyncio.sleep(0.05)
+        consumer.on_delta("y" * 2000)
+        await asyncio.sleep(0.05)
+        consumer.finish()
+        await task
+
+        adapter.edit_message.assert_awaited_once()
+        deleted = {call.args[1] for call in adapter.delete_message.await_args_list}
+        assert deleted == {"preview2"}
         assert consumer.final_response_sent is True
 
     @pytest.mark.asyncio

@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-10-03T09:49:28.301674",
+    "role": "TELEGRAM_GATEWAY",
+    "task": "Send an email to user@example.com with project updates",
+    "response": "[AWAITING APPROVAL] Send an email to user@example.com with project updates",
+    "latency_ms": 1,
+    "model": "telegram_gate"
+  }
+]
