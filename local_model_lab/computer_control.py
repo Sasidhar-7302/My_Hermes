@@ -35,6 +35,39 @@ except ImportError:
     except ImportError:
         get_screen_vision = None
 
+try:
+    from window_services import (
+        get_display_monitors,
+        list_active_windows,
+        snap_window,
+        move_window_to_monitor,
+        focus_window,
+    )
+except ImportError:
+    try:
+        from local_model_lab.window_services import (
+            get_display_monitors,
+            list_active_windows,
+            snap_window,
+            move_window_to_monitor,
+            focus_window,
+        )
+    except ImportError:
+        get_display_monitors = None
+        list_active_windows = None
+        snap_window = None
+        move_window_to_monitor = None
+        focus_window = None
+
+try:
+    from shell_daemon import is_emergency_stopped, trigger_emergency_stop
+except ImportError:
+    try:
+        from local_model_lab.shell_daemon import is_emergency_stopped, trigger_emergency_stop
+    except ImportError:
+        is_emergency_stopped = lambda: False
+        trigger_emergency_stop = lambda: "STOPPED"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. HARDLINE SAFETY POLICIES & GUARDS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,6 +147,13 @@ def audit_action_safety(action_name: str, payload: str, window_context: str = ""
     Flags messaging/emails for Telegram confirmation.
     """
     combined_text = f"{action_name} {payload} {window_context}".lower()
+
+    # 0. EMERGENCY PANIC STOP SHIELD
+    if is_emergency_stopped():
+        raise SafetyViolationError(
+            "[EMERGENCY PANIC STOP ACTIVE] All computer control actions are currently locked. "
+            "Clear emergency stop via tray or CLI to resume."
+        )
 
     # 1. DELETION & DATA WIPE SHIELD (Hard Block)
     for pat in DELETION_PATTERNS:
@@ -750,7 +790,35 @@ def execute_computer_task(task_prompt: str) -> Dict[str, Any]:
 
     task_lower = task_prompt.lower()
 
-    # 0. Screen Vision & UI Inspection
+    # 0. Emergency Panic Stop Command
+    if any(k in task_lower for k in ("emergency stop", "panic stop", "abort all actions", "stop all actions")):
+        trigger_emergency_stop()
+        return {"status": "success", "action": "emergency_stop", "message": "Emergency Panic Stop engaged."}
+
+    # 0a. Multi-Monitor Listing
+    if any(k in task_lower for k in ("list monitors", "display monitors", "show monitors", "detect monitors")):
+        if get_display_monitors:
+            mons = [m.to_dict() for m in get_display_monitors()]
+            return {"status": "success", "total_monitors": len(mons), "monitors": mons}
+        return {"status": "error", "message": "Multi-monitor services unavailable."}
+
+    # 0b. Snap Window
+    if "snap " in task_lower:
+        match = re.search(r'snap\s+(?:window\s+)?["\']?(.*?)["\']?\s+to\s+["\']?(left|right|top|bottom|maximize|max|minimize|min|center)["\']?', task_prompt, re.IGNORECASE)
+        if match and snap_window:
+            target_win = match.group(1).strip()
+            pos = match.group(2).strip()
+            return snap_window(target_win or "active", pos)
+
+    # 0c. Move Window to Monitor
+    if "move " in task_lower and ("monitor" in task_lower or "display" in task_lower):
+        match = re.search(r'move\s+(?:window\s+)?["\']?(.*?)["\']?\s+to\s+(?:monitor|display)\s+(\d+)', task_prompt, re.IGNORECASE)
+        if match and move_window_to_monitor:
+            target_win = match.group(1).strip()
+            mon_id = int(match.group(2).strip())
+            return move_window_to_monitor(target_win or "active", mon_id)
+
+    # 0d. Screen Vision & UI Inspection
     if any(k in task_lower for k in ("what is on my screen", "inspect screen", "describe screen", "look at screen", "read screen")):
         return inspect_screen_with_vision(task_prompt)
 
