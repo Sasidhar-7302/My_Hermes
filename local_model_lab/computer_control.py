@@ -68,6 +68,15 @@ except ImportError:
         is_emergency_stopped = lambda: False
         trigger_emergency_stop = lambda: "STOPPED"
 
+try:
+    from paper_client import get_paper_client
+except ImportError:
+    try:
+        from local_model_lab.paper_client import get_paper_client
+    except ImportError:
+        get_paper_client = None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. HARDLINE SAFETY POLICIES & GUARDS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -472,62 +481,54 @@ def browser_search(query: str) -> Dict[str, Any]:
 def call_paper_mcp(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Interacts directly with Paper's local MCP server at http://127.0.0.1:29979/mcp."""
     audit_action_safety("paper_mcp", f"{tool_name} with {arguments}")
-    if arguments is None:
-        arguments = {}
+    if get_paper_client:
+        return get_paper_client().call_tool(tool_name, arguments or {})
+    return {"status": "error", "message": "Paper MCP client not initialized"}
 
-    payload = json.dumps({
-        "jsonrpc": "2.0",
-        "id": int(time.time()),
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments
-        }
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        "http://127.0.0.1:29979/mcp",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream"
-        }
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            text = resp.read().decode("utf-8")
-            for line in text.splitlines():
-                if line.startswith("data:"):
-                    data = json.loads(line[5:].strip())
-                    return {"status": "success", "result": data.get("result")}
-            return {"status": "success", "raw": text}
-    except Exception as e:
-        return {"status": "error", "message": f"Paper MCP call failed: {str(e)}"}
 
 def paper_design(brief: str, html_layout: str = "") -> Dict[str, Any]:
     """Automates UI design in Paper via its native MCP server or window focus."""
     audit_action_safety("paper_design", brief)
-    launch_application("paper")
-    time.sleep(1.0)
+    client = get_paper_client() if get_paper_client else None
+    if client and not client.ensure_paper_running():
+        launch_application("paper")
+        time.sleep(1.0)
+    elif not client:
+        launch_application("paper")
+        time.sleep(1.0)
     focus_window_by_title("Paper")
 
-    # Call create_artboard on Paper MCP
-    mcp_res = call_paper_mcp("create_artboard", {"name": f"Design: {brief[:30]}"})
-    if mcp_res.get("status") == "success":
-        artboard_id = mcp_res.get("result", {}).get("artboardId")
-        if html_layout:
-            call_paper_mcp("write_html", {"html": html_layout, "parentId": artboard_id})
-        return {
-            "status": "success",
-            "message": f"Created design artboard for '{brief}' in Paper",
-            "artboard": mcp_res.get("result")
-        }
+    if get_paper_client:
+        client = get_paper_client()
+        st = client.status()
+        if st.listening:
+            if not st.file_open:
+                return {
+                    "status": "success",
+                    "action": "paper_ready",
+                    "message": f"Paper Desktop is running and focused for '{brief}'. Open or create a Paper file to start generating canvas components.",
+                    "paper_status": st.to_dict(),
+                }
+            clean_name = re.sub(r'[^a-zA-Z0-9\s_-]', '', brief)[:40].strip() or "Hermes Design"
+            artboard_res = client.create_artboard(name=clean_name)
+            artboard_data = artboard_res.get("data") if artboard_res.get("status") == "success" else None
+            html_res = None
+            if html_layout:
+                target_id = artboard_data.get("artboardId") if isinstance(artboard_data, dict) else None
+                html_res = client.write_html(html=html_layout, target_node_id=target_id)
+            return {
+                "status": "success",
+                "message": f"Created design artboard for '{brief}' in Paper",
+                "artboard": artboard_res,
+                "html_render": html_res,
+            }
+
     return {
         "status": "success",
         "message": f"Paper opened and ready to design: '{brief}'",
         "focused": focus_window_by_title("Paper")
     }
+
 
 # ── KEYBOARD & WINDOW PRIMITIVES ────────────────────────────────────────────
 
@@ -843,8 +844,22 @@ def execute_computer_task(task_prompt: str) -> Dict[str, Any]:
             return type_into_ui_element(target_field, text_to_type)
 
     # 1. Paper Design Actions
-    if "paper" in task_lower and ("design" in task_lower or "artboard" in task_lower or "draw" in task_lower or "create" in task_lower):
-        return paper_design(task_prompt)
+    if "paper" in task_lower:
+        if any(k in task_lower for k in ("paper status", "paper info", "is paper running", "check paper")):
+            if get_paper_client:
+                st = get_paper_client().status()
+                return {"status": "success", "action": "paper_status", "paper": st.to_dict()}
+            return {"status": "error", "message": "Paper client not available."}
+
+        if any(k in task_lower for k in ("inspect paper", "paper tree", "paper summary", "paper elements")):
+            if get_paper_client:
+                res = get_paper_client().get_tree_summary()
+                return {"status": "success", "action": "paper_tree_summary", "result": res}
+            return {"status": "error", "message": "Paper client not available."}
+
+        if any(k in task_lower for k in ("design", "artboard", "draw", "create", "write html")):
+            return paper_design(task_prompt)
+
 
     # 2. Browser Navigation & Web Search
     if "browse to" in task_lower or "open url" in task_lower or ("go to" in task_lower and any(ext in task_lower for ext in [".com", ".org", ".io", ".net", "http"])):
