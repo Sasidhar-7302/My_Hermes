@@ -12,7 +12,7 @@ if r.status_code == 200:
         mid = m.get('id', '')
         ctx = m.get('context_window', m.get('context_length', '?'))
         print(f'  {mid:<55} ctx:{ctx}')
-    with open('local_model_lab/groq_models.json','w') as f:
+    with open('local_model_lab/groq_models.json', 'w', encoding='utf-8') as f:
         json.dump(r.json(), f, indent=2)
     print('\nSaved to groq_models.json')
 else:
