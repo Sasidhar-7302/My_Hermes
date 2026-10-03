@@ -1,0 +1,18 @@
+[
+  {
+    "timestamp": "2026-10-03T09:50:07.531620",
+    "role": "SECURITY_SHIELD",
+    "task": "Buy a subscription and checkout now",
+    "response": "[BLOCKED] [FINANCIAL SHIELD ACTIVATED] Action blocked: 'dispatch_task'. Entering payment details, checking out, and conducting financial transactions are strictly prohibited.",
+    "latency_ms": 1,
+    "model": "hardline_guard"
+  },
+  {
+    "timestamp": "2026-10-03T09:50:02.254924",
+    "role": "SECURITY_SHIELD",
+    "task": "Delete all test files in C:\\tmp",
+    "response": "[BLOCKED] [SAFETY SHIELD ACTIVATED] Action blocked: 'dispatch_task'. Data deletion, file removal, and wiping commands are strictly prohibited by user security policy.",
+    "latency_ms": 1,
+    "model": "hardline_guard"
+  }
+]

@@ -1,0 +1,230 @@
+{
+  "timestamp": "2026-09-27T22:43:49.745496",
+  "results": [
+    {
+      "id": "qwen3.5:9b",
+      "label": "CEO / Qwen3.5 9B",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 15402,
+      "http_code": 200
+    },
+    {
+      "id": "hermes-local:latest",
+      "label": "Hermes Local (custom)",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 22857,
+      "http_code": 200
+    },
+    {
+      "id": "gemma4:31b",
+      "label": "Gemma 4 31B",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 39962,
+      "http_code": 200
+    },
+    {
+      "id": "gemma4:e4b",
+      "label": "Gemma 4 E4B (edge)",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 16808,
+      "http_code": 200
+    },
+    {
+      "id": "qwen3.5:4b",
+      "label": "Qwen3.5 4B (fast)",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 6823,
+      "http_code": 200
+    },
+    {
+      "id": "ornith:9b",
+      "label": "Ornith 9B",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 11883,
+      "http_code": 200
+    },
+    {
+      "id": "llama3.1:latest",
+      "label": "Llama 3.1 8B",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 10794,
+      "http_code": 200
+    },
+    {
+      "id": "hermes-local-qwen4b:latest",
+      "label": "Hermes Local Qwen 4B",
+      "provider": "ollama_local",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 12259,
+      "http_code": 200
+    },
+    {
+      "id": "nemotron-3-super:cloud",
+      "label": "Nemotron 3 Super (cloud)",
+      "provider": "ollama_cloud",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 1102,
+      "http_code": 200
+    },
+    {
+      "id": "gemma4:cloud",
+      "label": "Gemma 4 31B (cloud)",
+      "provider": "ollama_cloud",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 707,
+      "http_code": 200
+    },
+    {
+      "id": "deepseek-v4-pro:cloud",
+      "label": "DeepSeek V4 Pro (cloud)",
+      "provider": "ollama_cloud",
+      "status": "HTTP_402",
+      "available": false,
+      "latency_ms": 508,
+      "http_code": 402
+    },
+    {
+      "id": "kimi-k3:cloud",
+      "label": "Kimi K3 (cloud)",
+      "provider": "ollama_cloud",
+      "status": "HTTP_402",
+      "available": false,
+      "latency_ms": 488,
+      "http_code": 402
+    },
+    {
+      "id": "glm-5.3:cloud",
+      "label": "GLM 5.3 (cloud)",
+      "provider": "ollama_cloud",
+      "status": "HTTP_402",
+      "available": false,
+      "latency_ms": 487,
+      "http_code": 402
+    },
+    {
+      "id": "minimax-m3:cloud",
+      "label": "MiniMax M3 (cloud)",
+      "provider": "ollama_cloud",
+      "status": "HTTP_402",
+      "available": false,
+      "latency_ms": 500,
+      "http_code": 402
+    },
+    {
+      "id": "nemotron-3-ultra:cloud",
+      "label": "Nemotron 3 Ultra (cloud)",
+      "provider": "ollama_cloud",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 1412,
+      "http_code": 200
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "label": "Nemotron 550B FREE",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 955,
+      "http_code": 200
+    },
+    {
+      "id": "deepseek/deepseek-v4-pro-0813",
+      "label": "DeepSeek V4 Pro",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 2556,
+      "http_code": 200
+    },
+    {
+      "id": "moonshotai/kimi-k3",
+      "label": "Kimi K3",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 937,
+      "http_code": 200
+    },
+    {
+      "id": "z-ai/glm-5.3",
+      "label": "GLM 5.3",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 707,
+      "http_code": 200
+    },
+    {
+      "id": "z-ai/glm-5.3-flash",
+      "label": "GLM 5.3 Flash",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 1922,
+      "http_code": 200
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash",
+      "label": "DeepSeek V4.1 Flash",
+      "provider": "openrouter",
+      "status": "ONLINE",
+      "available": true,
+      "latency_ms": 582,
+      "http_code": 200
+    },
+    {
+      "id": "gemini-2.5-flash-preview",
+      "label": "Gemini 2.5 Flash Preview",
+      "provider": "gemini",
+      "status": "HTTP_404",
+      "available": false,
+      "latency_ms": 454,
+      "http_code": 404
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "label": "Gemini 2.5 Flash Lite",
+      "provider": "gemini",
+      "status": "HTTP_404",
+      "available": false,
+      "latency_ms": 473,
+      "http_code": 404
+    },
+    {
+      "id": "qwen/qwen3-coder-480b-a35b-instruct",
+      "label": "Qwen3-Coder 480B (NIM)",
+      "provider": "nvidia",
+      "status": "NO_KEY",
+      "available": false,
+      "latency_ms": 0,
+      "http_code": 0
+    },
+    {
+      "id": "meta/llama-4-maverick-17b-128e-instruct",
+      "label": "Llama4 Maverick (NIM)",
+      "provider": "nvidia",
+      "status": "NO_KEY",
+      "available": false,
+      "latency_ms": 0,
+      "http_code": 0
+    }
+  ]
+}

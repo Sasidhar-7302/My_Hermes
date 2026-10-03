@@ -1,0 +1,10 @@
+[
+  {
+    "timestamp": "2026-10-03T09:49:41.711696",
+    "role": "TESTER",
+    "task": "Delete all test files in C:\\tmp",
+    "response": "I can't execute commands on your system \u2014 I don't have access to your file system or the ability to run shell commands.\n\nHowever, here's how you can do it yourself:\n\n**PowerShell:**\n```powershell\nRemove-Item \"C:\\tmp\\*test*\" -Force\n```\n\n**Command Prompt (CMD):**\n```cmd\ndel /q C:\\tmp\\*test*\n```\n\n> \u26a0\ufe0f **Be careful** \u2014 this will delete *all* files matching `*test*` in `C:\\tmp`. If you want to be more specific (e.g., only `.test.js`, `.test.ts`, `test_*.py`, etc.), adjust the pattern accordingly. For example:\n>\n> ```powershell\n> Remove-Item \"C:\\tmp\\*.test.js\",\"C:\\tmp\\*.test.ts\",\"C:\\tmp\\test_*.py\" -Force\n> ```\n\nWould you like help narrowing down the file patterns?",
+    "latency_ms": 768,
+    "model": "groq-qwen27b"
+  }
+]
