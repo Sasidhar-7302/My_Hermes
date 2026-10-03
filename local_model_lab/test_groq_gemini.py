@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-import requests, time, sys, io
+import os, requests, time, sys, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-GROQ_KEY   = 'REDACTED_GROQ_KEY'
-GEMINI_KEY = 'REDACTED_GEMINI_KEY'
+GROQ_KEY   = os.environ.get('GROQ_API_KEY', '')
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
 PROMPT = 'Reply with exactly: ONLINE'
 
 TESTS = [
