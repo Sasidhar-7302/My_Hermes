@@ -11,13 +11,16 @@ import sys
 import json
 import re
 import time
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 _cur_dir = os.path.dirname(os.path.abspath(__file__))
 if _cur_dir not in sys.path:
     sys.path.insert(0, _cur_dir)
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 
@@ -186,6 +189,38 @@ except ImportError:
         get_telegram_gateway = lambda: None
         get_relay_gateway = lambda: None
         default_channel_dispatcher = None
+
+# ── OMNI-MESH CROSS-DEVICE IMPORTS ──────────────────────────────────────────
+try:
+    from local_model_lab.omni_mesh import (
+        get_omni_mesh_hub,
+        read_pc_clipboard,
+        write_pc_clipboard,
+    )
+    from local_model_lab.companion_web import (
+        render_companion_html,
+        MANIFEST_JSON,
+        SERVICE_WORKER_JS,
+    )
+except ImportError:
+    try:
+        from omni_mesh import (
+            get_omni_mesh_hub,
+            read_pc_clipboard,
+            write_pc_clipboard,
+        )
+        from companion_web import (
+            render_companion_html,
+            MANIFEST_JSON,
+            SERVICE_WORKER_JS,
+        )
+    except Exception:
+        get_omni_mesh_hub = lambda: None
+        read_pc_clipboard = lambda: ""
+        write_pc_clipboard = lambda t: False
+        render_companion_html = lambda h, p: "<html><body>Hermes Companion</body></html>"
+        MANIFEST_JSON = {}
+        SERVICE_WORKER_JS = ""
 
 
 app = FastAPI(title="Hermes Agent Operations Center")
@@ -649,6 +684,116 @@ async def api_channels_simulate_test(request: Request):
         resp = await default_channel_dispatcher(prompt, channel=channel, user_id=user_id)
         return JSONResponse(content={"status": "ok", "response": resp, "channel": channel})
     return JSONResponse(content={"status": "error", "message": "Dispatcher unavailable"}, status_code=500)
+
+
+# ── OMNI-MESH CROSS-DEVICE API & PWA ────────────────────────────────────────
+
+@app.get("/companion", response_class=HTMLResponse)
+async def get_companion_page():
+    hub = get_omni_mesh_hub()
+    ip = hub.lan_ip if hub else "127.0.0.1"
+    port = hub.port if hub else 8000
+    return HTMLResponse(content=render_companion_html(ip, port))
+
+
+@app.get("/companion/manifest.json")
+async def get_companion_manifest():
+    return JSONResponse(content=MANIFEST_JSON)
+
+
+@app.get("/companion/sw.js")
+async def get_companion_sw():
+    from fastapi import Response
+    return Response(content=SERVICE_WORKER_JS, media_type="application/javascript")
+
+
+@app.websocket("/api/mesh/ws")
+async def websocket_mesh_endpoint(websocket: WebSocket):
+    hub = get_omni_mesh_hub()
+    if not hub:
+        await websocket.close()
+        return
+    client_ip = websocket.client.host if websocket.client else "127.0.0.1"
+    device = None
+    try:
+        await websocket.accept()
+        raw = await websocket.receive_text()
+        try:
+            init_data = json.loads(raw)
+        except Exception:
+            init_data = {}
+        import uuid
+        dev_id = str(init_data.get("device_id") or str(uuid.uuid4())[:8])
+        device = await hub.register_connection(
+            websocket=websocket,
+            device_id=dev_id,
+            name=init_data.get("name", "Companion"),
+            device_type=init_data.get("device_type", "phone"),
+            client_ip=client_ip,
+            user_agent=init_data.get("user_agent", ""),
+            battery=init_data.get("battery"),
+            is_charging=init_data.get("is_charging"),
+            skip_accept=True,
+        )
+        while True:
+            msg_text = await websocket.receive_text()
+            data = json.loads(msg_text)
+            await hub.handle_inbound_message(device.device_id, data)
+    except WebSocketDisconnect:
+        if device and hub:
+            await hub.unregister_connection(device.device_id)
+    except Exception as exc:
+        logger.debug(f"Mesh WebSocket disconnected/error: {exc}")
+        if device and hub:
+            await hub.unregister_connection(device.device_id)
+
+
+@app.get("/api/mesh/status")
+async def api_mesh_status():
+    hub = get_omni_mesh_hub()
+    return JSONResponse(content=hub.get_status_overview() if hub else {"status": "disabled"})
+
+
+@app.post("/api/mesh/notify")
+async def api_mesh_notify(request: Request):
+    data = await request.json()
+    title = str(data.get("title", "Hermes Alert"))
+    body = str(data.get("body", "Notification from PC"))
+    vibrate = bool(data.get("vibrate", True))
+    device_id = data.get("device_id")
+    hub = get_omni_mesh_hub()
+    if hub:
+        if device_id:
+            await hub.send_to_device(device_id, {
+                "type": "notification",
+                "title": title,
+                "body": body,
+                "vibrate": [150, 80, 150] if vibrate else [],
+            })
+        else:
+            hub.notify_all(title, body, vibrate=vibrate)
+        return JSONResponse(content={"status": "sent"})
+    return JSONResponse(content={"status": "error", "message": "Hub unavailable"}, status_code=500)
+
+
+@app.post("/api/mesh/clipboard/push")
+async def api_mesh_clipboard_push(request: Request):
+    data = await request.json()
+    text = str(data.get("text", ""))
+    write_pc_clipboard(text)
+    hub = get_omni_mesh_hub()
+    if hub:
+        await hub.broadcast_event({
+            "type": "clipboard_update",
+            "content": text,
+            "from_device": "desktop-host",
+        })
+    return JSONResponse(content={"status": "ok", "synced": text})
+
+
+@app.get("/api/mesh/clipboard/get")
+async def api_mesh_clipboard_get():
+    return JSONResponse(content={"clipboard": read_pc_clipboard()})
 
 
 # ==============================================================================
@@ -1494,6 +1639,14 @@ def dashboard():
         </div>
 
         <div class="stat-widget">
+            <div class="stat-icon">📱</div>
+            <div class="stat-meta">
+                <span class="stat-label">Omni-Mesh</span>
+                <span class="stat-val" id="top-stat-mesh" style="color: var(--accent-green);">CONNECTED</span>
+            </div>
+        </div>
+
+        <div class="stat-widget">
             <div class="stat-icon">🚨</div>
             <div class="stat-meta">
                 <span class="stat-label">Panic Stop</span>
@@ -1517,6 +1670,7 @@ def dashboard():
             <button class="tab-btn" onclick="setTab('shutdown')">🌙 Smart Shutdown</button>
             <button class="tab-btn" onclick="setTab('deals')">🛍️ Deal Finder</button>
             <button class="tab-btn" onclick="setTab('channels')">💬 Multi-Channel</button>
+            <button class="tab-btn" onclick="setTab('mesh')">📱 Omni-Mesh</button>
             <button class="tab-btn" onclick="setTab('security')">🔒 PII Shield</button>
             <button class="tab-btn" onclick="setTab('rpa')">🤖 RPA Studio</button>
             <button class="tab-btn" onclick="setTab('system')">⚡ System Health</button>
@@ -2091,6 +2245,84 @@ def dashboard():
         </div>
     </div>
 
+    <!-- TAB: OMNI-MESH CROSS-DEVICE ECOSYSTEM -->
+    <div id="tab-mesh" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">📱 Hermes Omni-Mesh: Multi-Device Ecosystem</h2>
+                    <p class="panel-desc">Real-time companion mesh unifying Desktop PC, Android/iOS Smartphone, Smartwatch (WearOS / Apple Watch), and Laptop.</p>
+                </div>
+                <div class="status-pill">
+                    <div class="pulse-dot"></div>
+                    <span id="mesh-hub-badge">HUB OPERATIONAL</span>
+                </div>
+            </div>
+
+            <!-- PAIRING & COMPANION ACCESS -->
+            <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-input); border-radius: 8px; padding: 10px;">
+                    <img id="mesh-qr-img" src="" alt="Pairing QR" style="width: 150px; height: 150px; border-radius: 6px; border: 1px solid var(--border-subtle); object-fit: contain; background: #000;" />
+                    <span style="font-size: 10px; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; font-weight: 600;">1-Tap Phone / Watch Scan</span>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 4px;">Hermes Companion PWA</div>
+                        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+                            Zero Termux hassle. Open this link on your phone, watch, or laptop to install the Hermes Companion. Includes <strong>instant clipboard sync</strong>, <strong>camera-to-vision relay</strong>, <strong>wrist haptics & voice prompts</strong>, and <strong>emergency panic controls</strong>.
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+                            <input type="text" id="mesh-companion-url" class="input-text" readonly style="flex: 1; font-family: monospace; font-size: 12px;" />
+                            <button class="btn-action" onclick="copyMeshUrl()">📋 Copy Link</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+                        <a id="btn-open-phone" href="/companion?mode=phone" target="_blank" class="btn-action" style="text-decoration: none;">📱 Open Mobile View</a>
+                        <a id="btn-open-watch" href="/companion?mode=watch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Open Watch HUD</a>
+                        <a id="btn-open-laptop" href="/companion?mode=laptop" target="_blank" class="btn-action" style="text-decoration: none;">💻 Open Laptop View</a>
+                        <button class="btn-action" onclick="refreshMeshDevices()">🔄 Refresh Mesh</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONNECTED DEVICES GRID -->
+            <div style="margin-bottom: 20px;">
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 12px; display: flex; justify-content: space-between;">
+                    <span>Active Mesh Nodes</span>
+                    <span id="mesh-device-count" style="color: var(--accent-green);">1 Connected</span>
+                </div>
+                <div id="mesh-devices-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px;">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- UNIFIED CLIPBOARD & BROADCAST -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="panel-section" style="background: var(--bg-card); padding: 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 12px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">📋 Cross-Device Unified Clipboard</div>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Push text directly to your phone, watch, or secondary laptop clipboard, or pull from PC:</p>
+                    <textarea id="mesh-clip-input" class="input-textarea" style="width: 100%; height: 80px;" placeholder="Enter text to push across devices..."></textarea>
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button class="btn-action" onclick="pushMeshClipboard()">⬆️ Broadcast to All Devices</button>
+                        <button class="btn-action" onclick="pullMeshClipboard()">⬇️ Fetch PC Clipboard</button>
+                    </div>
+                </div>
+
+                <div class="panel-section" style="background: var(--bg-card); padding: 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 12px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">🔔 Push Notification & Wrist Haptic Alert</div>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Send a test alert with physical vibration to all connected phones & smartwatches:</p>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <input type="text" id="mesh-notif-title" class="input-text" placeholder="Title (e.g. Model Training Complete)" value="Hermes AI Alert" />
+                        <input type="text" id="mesh-notif-body" class="input-text" placeholder="Message content..." value="All benchmarks completed successfully." />
+                        <div>
+                            <button class="btn-action" onclick="sendMeshAlert()">⚡ Send Push & Buzz</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB 7: SECURITY & PII SHIELD -->
     <div id="tab-security" class="tab-panel">
         <div class="panel-container">
@@ -2380,6 +2612,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (tabId === 'shutdown') refreshShutdownStatus();
             if (tabId === 'deals') refreshWatches();
             if (tabId === 'channels') refreshChannels();
+            if (tabId === 'mesh') refreshMeshDevices();
             if (tabId === 'rpa') refreshMacros();
             if (tabId === 'system') refreshSystemHealth();
         }
@@ -3025,6 +3258,139 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 showToast("Executive briefing generated");
             } catch (e) {
                 alert('Briefing error: ' + e);
+            }
+        }
+
+        // --- Omni-Mesh Cross-Device JavaScript ---
+        async function refreshMeshDevices() {
+            try {
+                const res = await fetch('/api/mesh/status');
+                const data = await res.json();
+                
+                if (data.pairing_qr) {
+                    const qrEl = document.getElementById('mesh-qr-img');
+                    if (qrEl) qrEl.src = data.pairing_qr;
+                }
+                if (data.companion_url) {
+                    const urlEl = document.getElementById('mesh-companion-url');
+                    if (urlEl) urlEl.value = data.companion_url;
+                }
+                
+                const countBadge = document.getElementById('mesh-device-count');
+                if (countBadge) {
+                    countBadge.innerText = `${data.connected_devices || 1} Connected (${data.total_devices || 1} Registered)`;
+                }
+
+                const grid = document.getElementById('mesh-devices-grid');
+                if (grid && data.devices) {
+                    grid.innerHTML = data.devices.map(d => {
+                        const icon = d.device_type === 'phone' ? '📱' :
+                                     d.device_type === 'watch' ? '⌚' :
+                                     d.device_type === 'laptop' ? '💻' : '🖥️';
+                        const batt = d.battery_level !== null && d.battery_level !== undefined ?
+                                     `${d.is_charging ? '⚡ ' : '🔋 '}${d.battery_level}%` : '⚡ Line Powered';
+                        const statusColor = d.connected ? 'var(--accent-green)' : 'var(--text-muted)';
+                        const statusText = d.connected ? 'ONLINE' : 'OFFLINE';
+
+                        return `
+                        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 20px;">${icon}</span>
+                                    <div>
+                                        <div style="font-weight: 700; color: #ffffff; font-size: 13px;">${d.name}</div>
+                                        <div style="font-size: 10px; color: var(--text-muted);">${d.ip_address || 'Local Host'} • ${d.device_type.toUpperCase()}</div>
+                                    </div>
+                                </div>
+                                <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: rgba(16,185,129,0.1); padding: 3px 8px; border-radius: 10px;">
+                                    ${statusText}
+                                </span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 4px 0; border-top: 1px solid var(--border-subtle);">
+                                <span>Power</span>
+                                <span style="color: var(--text-heading); font-weight: 600;">${batt}</span>
+                            </div>
+                            ${d.device_id !== 'desktop-host' ? `
+                            <div style="display: flex; gap: 6px; margin-top: 4px;">
+                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="buzzMeshDevice('${d.device_id}')">🔔 Buzz</button>
+                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="pushMeshClipboardTo('${d.device_id}')">📋 Push Clip</button>
+                            </div>` : ''}
+                        </div>`;
+                    }).join('');
+                }
+            } catch (e) {
+                console.error("Failed to refresh mesh devices", e);
+            }
+        }
+
+        function copyMeshUrl() {
+            const urlInput = document.getElementById('mesh-companion-url');
+            if (urlInput) {
+                navigator.clipboard.writeText(urlInput.value).then(() => {
+                    showToast("Companion link copied to clipboard!");
+                }).catch(() => {
+                    urlInput.select();
+                    document.execCommand('copy');
+                    showToast("Link copied!");
+                });
+            }
+        }
+
+        async function pushMeshClipboard() {
+            const text = document.getElementById('mesh-clip-input').value;
+            if (!text) {
+                alert("Please enter text to push.");
+                return;
+            }
+            try {
+                const res = await fetch('/api/mesh/clipboard/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                await res.json();
+                showToast("Clipboard broadcast to all companion devices!");
+            } catch (e) {
+                alert("Push error: " + e);
+            }
+        }
+
+        async function pullMeshClipboard() {
+            try {
+                const res = await fetch('/api/mesh/clipboard/get');
+                const data = await res.json();
+                document.getElementById('mesh-clip-input').value = data.clipboard || '';
+                showToast("Fetched PC clipboard");
+            } catch (e) {
+                alert("Pull error: " + e);
+            }
+        }
+
+        async function sendMeshAlert() {
+            const title = document.getElementById('mesh-notif-title').value;
+            const body = document.getElementById('mesh-notif-body').value;
+            try {
+                await fetch('/api/mesh/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: title, body: body, vibrate: true })
+                });
+                showToast("Push notification & haptic buzz dispatched!");
+            } catch (e) {
+                alert("Alert error: " + e);
+            }
+        }
+
+        async function buzzMeshDevice(deviceId) {
+            try {
+                await fetch('/api/mesh/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId, title: "Hermes Ping", body: "Direct device buzz from PC", vibrate: true })
+                });
+                showToast(`Buzzed device ${deviceId}`);
+            } catch (e) {
+                alert("Buzz error: " + e);
             }
         }
 
