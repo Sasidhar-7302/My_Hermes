@@ -2,7 +2,8 @@
 """
 Hermes Agent Company Dashboard & Executive Operations Center
 Integrates Multi-Agent Team Roster, Multi-Monitor Desktop Shell, Paper Desktop MCP Studio,
-PII Redaction Shield, RPA Macro Studio, System & Proactivity Observer, and Browser Control.
+PII Redaction Shield, RPA Macro Studio, System & Proactivity Observer, Browser Control,
+Smart Network-Idle Shutdown, Multi-Vendor Deal Finder & Watchlist, and Multi-Channel Gateways.
 """
 
 import os
@@ -119,6 +120,72 @@ except ImportError:
         from system_observer import get_system_observer
     except Exception:
         get_system_observer = lambda: None
+
+# ── TURNKEY AUTOMATION MODULE IMPORTS ───────────────────────────────────────
+try:
+    from local_model_lab.smart_shutdown import (
+        get_smart_shutdown_monitor,
+        SmartShutdownConfig,
+    )
+except ImportError:
+    try:
+        from smart_shutdown import (
+            get_smart_shutdown_monitor,
+            SmartShutdownConfig,
+        )
+    except Exception:
+        get_smart_shutdown_monitor = lambda: None
+        SmartShutdownConfig = lambda **kwargs: None
+
+try:
+    from local_model_lab.deal_finder import (
+        search_deals,
+        get_deal_watch_store,
+    )
+except ImportError:
+    try:
+        from deal_finder import (
+            search_deals,
+            get_deal_watch_store,
+        )
+    except Exception:
+        search_deals = lambda q, v=None, m=6: []
+        get_deal_watch_store = lambda: None
+
+try:
+    import channels
+    from channels import (
+        get_all_channel_statuses,
+        get_channel_policy_manager,
+        get_discord_gateway,
+        get_slack_gateway,
+        get_whatsapp_gateway,
+        get_telegram_gateway,
+        get_relay_gateway,
+        default_channel_dispatcher,
+    )
+except ImportError:
+    try:
+        from local_model_lab import channels
+        from local_model_lab.channels import (
+            get_all_channel_statuses,
+            get_channel_policy_manager,
+            get_discord_gateway,
+            get_slack_gateway,
+            get_whatsapp_gateway,
+            get_telegram_gateway,
+            get_relay_gateway,
+            default_channel_dispatcher,
+        )
+    except Exception:
+        get_all_channel_statuses = lambda: {}
+        get_channel_policy_manager = lambda: None
+        get_discord_gateway = lambda: None
+        get_slack_gateway = lambda: None
+        get_whatsapp_gateway = lambda: None
+        get_telegram_gateway = lambda: None
+        get_relay_gateway = lambda: None
+        default_channel_dispatcher = None
 
 
 app = FastAPI(title="Hermes Agent Operations Center")
@@ -449,6 +516,141 @@ async def api_browser_status():
     })
 
 
+# ── SMART SHUTDOWN API ──────────────────────────────────────────────────────
+
+@app.get("/api/shutdown/status")
+async def api_shutdown_status():
+    mon = get_smart_shutdown_monitor()
+    return JSONResponse(content=mon.snapshot() if mon else {"running": False, "status": "UNAVAILABLE"})
+
+
+@app.post("/api/shutdown/start")
+async def api_shutdown_start(request: Request):
+    mon = get_smart_shutdown_monitor()
+    if not mon:
+        return JSONResponse(content={"status": "error", "message": "Smart shutdown unavailable"}, status_code=500)
+    data = await request.json()
+    cfg = SmartShutdownConfig(
+        idle_minutes=int(data.get("idle_minutes", 2)),
+        idle_kbps=float(data.get("idle_kbps", 35.0)),
+        active_kbps=float(data.get("active_kbps", 150.0)),
+        action=str(data.get("action", "shutdown")).lower(),
+        countdown_seconds=int(data.get("countdown_seconds", 60)),
+        require_user_idle_seconds=int(data.get("require_user_idle_seconds", 120)),
+    )
+    ok, msg = mon.start(cfg)
+    return JSONResponse(content={"status": "ok" if ok else "error", "message": msg, "snapshot": mon.snapshot()})
+
+
+@app.post("/api/shutdown/cancel")
+async def api_shutdown_cancel():
+    mon = get_smart_shutdown_monitor()
+    if not mon:
+        return JSONResponse(content={"status": "error", "message": "Smart shutdown unavailable"}, status_code=500)
+    ok, msg = mon.cancel()
+    return JSONResponse(content={"status": "ok" if ok else "error", "message": msg, "snapshot": mon.snapshot()})
+
+
+# ── DEAL FINDER API ─────────────────────────────────────────────────────────
+
+@app.post("/api/deals/search")
+async def api_deals_search(request: Request):
+    data = await request.json()
+    query = str(data.get("query", "")).strip()
+    vendors = data.get("vendors") or ["amazon", "newegg", "bestbuy", "walmart"]
+    max_results = int(data.get("max_results", 6))
+    if not query:
+        return JSONResponse(content={"count": 0, "deals": []})
+    deals = search_deals(query, vendors=vendors, max_results_per_vendor=max_results)
+    return JSONResponse(content={"count": len(deals), "deals": [d.to_dict() for d in deals]})
+
+
+@app.get("/api/deals/watches")
+async def api_deals_watches():
+    store = get_deal_watch_store()
+    watches = store.list_watches() if store else []
+    return JSONResponse(content={"count": len(watches), "watches": [w.to_dict() for w in watches]})
+
+
+@app.post("/api/deals/watches/add")
+async def api_deals_watch_add(request: Request):
+    data = await request.json()
+    query = str(data.get("query", "")).strip()
+    target_price = float(data["target_price"]) if data.get("target_price") is not None else None
+    vendors = data.get("vendors") or ["amazon", "newegg", "bestbuy", "walmart"]
+    interval = int(data.get("interval_minutes", 180))
+    store = get_deal_watch_store()
+    if not store:
+        return JSONResponse(content={"status": "error", "message": "Store unavailable"}, status_code=500)
+    watch = store.add_watch(query=query, target_price=target_price, vendors=vendors, interval_minutes=interval)
+    return JSONResponse(content={"status": "ok", "watch": watch.to_dict()})
+
+
+@app.post("/api/deals/watches/remove")
+async def api_deals_watch_remove(request: Request):
+    data = await request.json()
+    watch_id = str(data.get("watch_id", ""))
+    store = get_deal_watch_store()
+    ok = store.remove_watch(watch_id) if store else False
+    return JSONResponse(content={"status": "ok" if ok else "not_found"})
+
+
+@app.post("/api/deals/watches/check")
+async def api_deals_watch_check(request: Request):
+    data = await request.json()
+    watch_id = str(data.get("watch_id", ""))
+    store = get_deal_watch_store()
+    res = store.check_watch(watch_id) if store else None
+    if not res:
+        return JSONResponse(content={"status": "not_found"}, status_code=404)
+    return JSONResponse(content={"status": "ok", **res})
+
+
+# ── MULTI-CHANNEL GATEWAYS API ──────────────────────────────────────────────
+
+@app.get("/api/channels/status")
+async def api_channels_status():
+    return JSONResponse(content=get_all_channel_statuses())
+
+
+@app.post("/api/channels/pair")
+async def api_channels_pair(request: Request):
+    data = await request.json()
+    channel = str(data.get("channel", "")).strip().lower()
+    code = str(data.get("code", "")).strip()
+    policy = get_channel_policy_manager()
+    user_id = policy.approve_pairing_code(channel, code) if policy else None
+    if user_id:
+        return JSONResponse(content={"status": "ok", "message": f"Approved {channel} user {user_id}", "user_id": user_id})
+    return JSONResponse(content={"status": "error", "message": "Invalid or expired pairing code"}, status_code=400)
+
+
+@app.post("/api/channels/allowlist/add")
+async def api_channels_allowlist_add(request: Request):
+    data = await request.json()
+    channel = str(data.get("channel", "")).strip().lower()
+    user_id = str(data.get("user_id", "")).strip()
+    policy = get_channel_policy_manager()
+    if policy and channel and user_id:
+        policy.add_to_allowlist(channel, user_id)
+        return JSONResponse(content={"status": "ok", "allowlist": policy.get_summary().get(channel, {}).get("allowed_users", [])})
+    return JSONResponse(content={"status": "bad_request"}, status_code=400)
+
+
+@app.post("/api/channels/simulate_test")
+async def api_channels_simulate_test(request: Request):
+    data = await request.json()
+    channel = str(data.get("channel", "web")).strip().lower()
+    prompt = str(data.get("prompt", "")).strip()
+    user_id = str(data.get("user_id", "test_user"))
+    if not prompt:
+        return JSONResponse(content={"status": "error", "message": "Empty prompt"}, status_code=400)
+    if default_channel_dispatcher:
+        resp = await default_channel_dispatcher(prompt, channel=channel, user_id=user_id)
+        return JSONResponse(content={"status": "ok", "response": resp, "channel": channel})
+    return JSONResponse(content={"status": "error", "message": "Dispatcher unavailable"}, status_code=500)
+
+
 # ==============================================================================
 # MAIN DASHBOARD UI
 # ==============================================================================
@@ -474,6 +676,12 @@ def dashboard():
 
     obs = get_system_observer()
     health_data = obs.get_health().to_dict() if obs else {"cpu_percent": 0.0, "ram_percent": 0.0}
+
+    # Turnkey module states
+    shutdown_mon = get_smart_shutdown_monitor()
+    shutdown_snap = shutdown_mon.snapshot() if shutdown_mon else {"running": False, "status": "INACTIVE"}
+    watch_store = get_deal_watch_store()
+    num_watches = len(watch_store.list_watches()) if watch_store else 0
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -534,8 +742,8 @@ def dashboard():
         /* TOP STATS BAR */
         .stats-bar {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 12px;
             margin-bottom: 22px;
         }}
 
@@ -543,7 +751,7 @@ def dashboard():
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
             border-radius: 8px;
-            padding: 12px 16px;
+            padding: 12px 14px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -559,9 +767,9 @@ def dashboard():
         }}
 
         .stat-icon {{
-            font-size: 22px;
-            width: 42px;
-            height: 42px;
+            font-size: 20px;
+            width: 40px;
+            height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -584,7 +792,7 @@ def dashboard():
         }}
 
         .stat-val {{
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--text-heading);
             margin-top: 2px;
@@ -795,12 +1003,6 @@ def dashboard():
             background: rgba(52, 211, 153, 0.12);
             color: var(--accent-green);
             border: 1px solid rgba(52, 211, 153, 0.25);
-        }}
-
-        .status-pill.offline {{
-            background: rgba(248, 113, 113, 0.12);
-            color: var(--accent-red);
-            border-color: rgba(248, 113, 113, 0.25);
         }}
 
         .pulse-dot {{
@@ -1242,51 +1444,61 @@ def dashboard():
         <div class="stat-widget">
             <div class="stat-icon">👥</div>
             <div class="stat-meta">
-                <span class="stat-label">Autonomous Agents</span>
-                <span class="stat-val">{num_roles} Active Roles</span>
+                <span class="stat-label">Agents</span>
+                <span class="stat-val">{num_roles} Roles</span>
             </div>
         </div>
 
         <div class="stat-widget">
             <div class="stat-icon">🖥️</div>
             <div class="stat-meta">
-                <span class="stat-label">Multi-Monitor Desktop</span>
-                <span class="stat-val">{num_monitors} Mon &bull; {num_windows} Windows</span>
+                <span class="stat-label">Monitors & Windows</span>
+                <span class="stat-val">{num_monitors} Mon &bull; {num_windows} Win</span>
             </div>
         </div>
 
         <div class="stat-widget">
             <div class="stat-icon">🎨</div>
             <div class="stat-meta">
-                <span class="stat-label">Paper MCP Studio</span>
+                <span class="stat-label">Paper MCP</span>
                 <span class="stat-val" style="color: {'var(--accent-green)' if paper_online else 'var(--text-muted)'};">
-                    {'ONLINE (29979)' if paper_online else 'STANDBY'}
+                    {'ONLINE' if paper_online else 'STANDBY'}
                 </span>
+            </div>
+        </div>
+
+        <div class="stat-widget">
+            <div class="stat-icon">🌙</div>
+            <div class="stat-meta">
+                <span class="stat-label">Smart Power</span>
+                <span class="stat-val" id="top-stat-shutdown" style="color: {'var(--accent-gold)' if shutdown_snap.get('running') else 'var(--text-muted)'};">
+                    {shutdown_snap.get('status', 'INACTIVE')}
+                </span>
+            </div>
+        </div>
+
+        <div class="stat-widget">
+            <div class="stat-icon">🛍️</div>
+            <div class="stat-meta">
+                <span class="stat-label">Deal Watches</span>
+                <span class="stat-val" id="top-stat-watches">{num_watches} Active</span>
             </div>
         </div>
 
         <div class="stat-widget">
             <div class="stat-icon">🔒</div>
             <div class="stat-meta">
-                <span class="stat-label">PII & Secret Shield</span>
-                <span class="stat-val" style="color: var(--accent-green);">ARMED (Zero-Leak)</span>
-            </div>
-        </div>
-
-        <div class="stat-widget">
-            <div class="stat-icon">⚡</div>
-            <div class="stat-meta">
-                <span class="stat-label">System Resources</span>
-                <span class="stat-val">CPU: {health_data.get('cpu_percent', 0)}% &bull; RAM: {health_data.get('ram_percent', 0)}%</span>
+                <span class="stat-label">PII Shield</span>
+                <span class="stat-val" style="color: var(--accent-green);">ARMED</span>
             </div>
         </div>
 
         <div class="stat-widget">
             <div class="stat-icon">🚨</div>
             <div class="stat-meta">
-                <span class="stat-label">Emergency Stop</span>
+                <span class="stat-label">Panic Stop</span>
                 <span class="stat-val" id="top-stat-stop" style="color: {'var(--accent-red)' if stopped_state else 'var(--accent-green)'};">
-                    {'STOPPED' if stopped_state else 'ARMED (Ctrl+Esc)'}
+                    {'STOPPED' if stopped_state else 'READY'}
                 </span>
             </div>
         </div>
@@ -1299,14 +1511,17 @@ def dashboard():
             <h1 class="section-title">Autonomous Operations Center</h1>
         </div>
         <div class="tab-controls">
-            <button class="tab-btn active" onclick="setTab('roster')">👥 Team Roster ({num_roles})</button>
+            <button class="tab-btn active" onclick="setTab('roster')">👥 Team Roster</button>
             <button class="tab-btn" onclick="setTab('desktop')">🖥️ Desktop & Monitors</button>
             <button class="tab-btn" onclick="setTab('paper')">🎨 Paper MCP Studio</button>
-            <button class="tab-btn" onclick="setTab('security')">🔒 PII & Secret Shield</button>
-            <button class="tab-btn" onclick="setTab('rpa')">🤖 RPA Macro Studio</button>
-            <button class="tab-btn" onclick="setTab('system')">⚡ System & Health</button>
-            <button class="tab-btn" onclick="setTab('browser')">🌐 In-Browser Extension</button>
-            <button class="tab-btn" onclick="setTab('logs')">📜 Task Audit Trail ({num_tasks})</button>
+            <button class="tab-btn" onclick="setTab('shutdown')">🌙 Smart Shutdown</button>
+            <button class="tab-btn" onclick="setTab('deals')">🛍️ Deal Finder</button>
+            <button class="tab-btn" onclick="setTab('channels')">💬 Multi-Channel</button>
+            <button class="tab-btn" onclick="setTab('security')">🔒 PII Shield</button>
+            <button class="tab-btn" onclick="setTab('rpa')">🤖 RPA Studio</button>
+            <button class="tab-btn" onclick="setTab('system')">⚡ System Health</button>
+            <button class="tab-btn" onclick="setTab('browser')">🌐 Browser Extension</button>
+            <button class="tab-btn" onclick="setTab('logs')">📜 Audit Trail</button>
         </div>
     </div>
 
@@ -1379,7 +1594,7 @@ def dashboard():
 
                 <div class="emp-logs-accordion">
                     <button class="btn-toggle-logs" onclick="toggleEmpLogs('{role_name}')">
-                        <span>📜 Employee Activity Log ({len(get_employee_logs(role_name))})</span>
+                        <span>📜 Activity Log ({len(get_employee_logs(role_name))})</span>
                         <span id="arrow-{role_name}">▼</span>
                     </button>
                     <div id="logs-{role_name}" class="emp-logs-panel" style="display: none;">
@@ -1492,9 +1707,9 @@ def dashboard():
                 <table class="data-table" id="windows-table">
                     <thead>
                         <tr>
-                            <th>PID</th>
+                            <th>HWND</th>
                             <th>Window Title</th>
-                            <th>Process</th>
+                            <th>Status</th>
                             <th>Monitor</th>
                             <th>Coordinates</th>
                             <th>Actions</th>
@@ -1613,7 +1828,270 @@ def dashboard():
         </div>
     </div>
 
-    <!-- TAB 4: SECURITY & PII SHIELD -->
+    <!-- TAB 4: SMART SHUTDOWN -->
+    <div id="tab-shutdown" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🌙 Smart Network-Idle Shutdown & Sleep</h2>
+                    <p class="panel-desc">Monitors ongoing downloads and batch jobs. Safely powers down or puts the PC to sleep after completion.</p>
+                </div>
+                <button class="btn-action" onclick="refreshShutdownStatus()">&circlearrowright; Refresh Status</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Current Throughput</div>
+                    <div id="sd-rate-val" style="font-size: 22px; font-weight: 700; color: var(--accent-green); margin-top: 4px;">0 KB/s</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Network Inbound Rate</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Monitor State</div>
+                    <div id="sd-status-val" style="font-size: 22px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">INACTIVE</div>
+                    <div id="sd-state-sub" style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Ready to configure</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Idle Duration</div>
+                    <div id="sd-idle-val" style="font-size: 22px; font-weight: 700; color: var(--text-heading); margin-top: 4px;">0s / 120s</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Low-traffic accumulation</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Safety Safeguards</div>
+                    <div style="font-size: 14px; font-weight: 700; color: var(--accent-green); margin-top: 4px;">Active User Guard</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Won't sleep while you type / click</div>
+                </div>
+            </div>
+
+            <!-- CONFIGURATION & CONTROLS -->
+            <div style="background: var(--bg-input); padding: 18px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 12px;">⚙️ Configure Smart Power Policy</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px;">
+                    <div>
+                        <label style="font-size: 11px; color: var(--text-muted);">Action on Idle</label>
+                        <select id="sd-action" class="input-select" style="width: 100%; margin-top: 4px;">
+                            <option value="shutdown">Shutdown PC</option>
+                            <option value="sleep">Put PC to Sleep</option>
+                            <option value="hibernate">Hibernate PC</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="font-size: 11px; color: var(--text-muted);">Idle Minutes Required</label>
+                        <input type="number" id="sd-idle-min" class="input-text" style="width: 100%; margin-top: 4px;" value="2" min="1" max="60" />
+                    </div>
+
+                    <div>
+                        <label style="font-size: 11px; color: var(--text-muted);">Low Throughput Cutoff (KB/s)</label>
+                        <input type="number" id="sd-idle-kbps" class="input-text" style="width: 100%; margin-top: 4px;" value="35" min="5" max="2000" />
+                    </div>
+
+                    <div>
+                        <label style="font-size: 11px; color: var(--text-muted);">Active Download Min (KB/s)</label>
+                        <input type="number" id="sd-active-kbps" class="input-text" style="width: 100%; margin-top: 4px;" value="150" min="20" max="20000" />
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button id="btn-sd-start" class="btn-action" onclick="startShutdownMonitor()">🚀 Engage Smart Shutdown</button>
+                    <button id="btn-sd-cancel" class="btn-action btn-danger" style="display: none;" onclick="cancelShutdownMonitor()">⏹️ Abort / Cancel</button>
+                    <span id="sd-msg-banner" style="font-size: 11px; color: var(--text-muted);">Configure parameters above and click Engage.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 5: DEAL FINDER & WATCHLIST -->
+    <div id="tab-deals" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🛍️ Multi-Vendor Deal Finder & Price Drop Tracker</h2>
+                    <p class="panel-desc">Scrapes and cross-references live prices across Amazon, Newegg, Best Buy, Walmart, B&H Photo, and Micro Center without browser overhead.</p>
+                </div>
+                <div class="status-pill">
+                    <div class="pulse-dot"></div>
+                    <span>READ-ONLY SAFEGUARD ACTIVE</span>
+                </div>
+            </div>
+
+            <!-- SEARCH BAR -->
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 20px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+                    <input type="text" id="deal-search-query" class="input-text" placeholder="Search product (e.g. 2TB NVMe Gen4 SSD, RTX 4070 Super)..." style="flex: 1; min-width: 260px;" />
+                    <button class="btn-action" onclick="executeDealSearch()">🔍 Search Deals</button>
+                </div>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap;">
+                    <span>Include:</span>
+                    <label><input type="checkbox" id="v-amazon" checked /> Amazon</label>
+                    <label><input type="checkbox" id="v-newegg" checked /> Newegg</label>
+                    <label><input type="checkbox" id="v-bestbuy" checked /> Best Buy</label>
+                    <label><input type="checkbox" id="v-walmart" checked /> Walmart</label>
+                    <label><input type="checkbox" id="v-bhphoto" checked /> B&H Photo</label>
+                    <label><input type="checkbox" id="v-microcenter" checked /> Micro Center</label>
+                </div>
+            </div>
+
+            <!-- SEARCH RESULTS TABLE -->
+            <div style="margin-bottom: 24px;">
+                <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">Live Price Comparison (Sorted by Best Price)</h3>
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Vendor</th>
+                                <th>Item Title</th>
+                                <th>Item Price</th>
+                                <th>Shipping</th>
+                                <th>Best Total</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deals-results-tbody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                                    Type a product query above and click "Search Deals" to compare prices across vendors.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- WATCHLIST MANAGER -->
+            <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <h3 style="font-size: 13px; color: var(--text-heading);">🔔 Active Deal Watches & Price Alerts</h3>
+                        <p style="font-size: 11px; color: var(--text-muted);">Hermes periodically scans these items and alerts you when prices reach your target.</p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="watch-query" class="input-text" placeholder="Item query" style="width: 180px;" />
+                        <input type="number" id="watch-target" class="input-text" placeholder="Target ($)" style="width: 100px;" />
+                        <button class="btn-action" onclick="createDealWatch()">+ Add Watch</button>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tracked Product</th>
+                                <th>Target Price</th>
+                                <th>Last Best Price</th>
+                                <th>Best Retailer</th>
+                                <th>Last Checked</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="watches-tbody">
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 14px;">
+                                    No price watches configured. Add one above!
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 6: MULTI-CHANNEL GATEWAYS -->
+    <div id="tab-channels" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">💬 Multi-Channel Adapters & Gateways</h2>
+                    <p class="panel-desc">Connect Hermes to WhatsApp, Discord, Slack, Telegram, and Universal Webhooks with pairing code authorization.</p>
+                </div>
+                <button class="btn-action" onclick="refreshChannels()">&circlearrowright; Refresh Gateways</button>
+            </div>
+
+            <!-- GATEWAYS OVERVIEW CARDS -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: var(--text-heading);">Discord Gateway</span>
+                        <span id="st-discord" class="status-pill offline">OFFLINE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Slash commands (/hermes) & interaction webhooks with Ed25519 signature verification.</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: var(--text-heading);">Slack Gateway</span>
+                        <span id="st-slack" class="status-pill offline">OFFLINE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Events API & slash commands with HMAC-SHA256 request verification.</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: var(--text-heading);">WhatsApp Gateway</span>
+                        <span id="st-whatsapp" class="status-pill offline">OFFLINE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Twilio & Baileys bridge adapters with phone pairing codes.</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: var(--text-heading);">Telegram Bot</span>
+                        <span id="st-telegram" class="status-pill offline">OFFLINE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">Bot API webhooks & markdown responses.</div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: var(--text-heading);">Universal Relay</span>
+                        <span id="st-relay" class="status-pill">ONLINE</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">HTTP Webhook relay for Home Assistant, n8n, and custom bots.</div>
+                </div>
+            </div>
+
+            <!-- PAIRING CODE & ALLOWLIST MANAGER -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">🔑 Approve Channel Pairing Code</h3>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">When an unknown user messages Hermes on WhatsApp/Discord/Slack, enter their 6-digit code here to grant access:</p>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="pair-channel" class="input-select">
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="discord">Discord</option>
+                            <option value="slack">Slack</option>
+                            <option value="telegram">Telegram</option>
+                        </select>
+                        <input type="text" id="pair-code" class="input-text" placeholder="6-digit code" style="width: 120px;" maxlength="6" />
+                        <button class="btn-action" onclick="submitPairing()">Approve & Pair</button>
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">🧪 Test Dispatcher Simulator</h3>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Simulate an incoming message from any channel to test role routing & failover cascades:</p>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="sim-channel" class="input-select">
+                            <option value="discord">Discord</option>
+                            <option value="slack">Slack</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="relay">Relay</option>
+                        </select>
+                        <input type="text" id="sim-prompt" class="input-text" placeholder="Prompt message..." style="flex: 1;" />
+                        <button class="btn-action" onclick="simulateChannelMessage()">Send Test</button>
+                    </div>
+                    <div id="sim-output" style="margin-top: 10px; font-family: monospace; font-size: 11px; background: var(--bg-canvas); padding: 8px; border-radius: 4px; color: var(--accent-green); display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 7: SECURITY & PII SHIELD -->
     <div id="tab-security" class="tab-panel">
         <div class="panel-container">
             <div class="panel-header">
@@ -1662,7 +2140,7 @@ def dashboard():
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
                     <div>
                         <label style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 600;">Input Text</label>
-                        <textarea id="pii-input" class="input-textarea" style="width: 100%; height: 110px; margin-top: 4px;" placeholder="My email is alice@company.com and my Groq test key is gsk_0123456789abcdef0123456789."></textarea>
+                        <textarea id="pii-input" class="input-textarea" style="width: 100%; height: 110px; margin-top: 4px;" placeholder="My email is alice@company.com and my secret key is SAMPLE_REDACTED_API_KEY_12345."></textarea>
                         <div style="margin-top: 8px;">
                             <button class="btn-action" onclick="testPiiMasking()">🛡️ Test Redaction</button>
                         </div>
@@ -1677,7 +2155,7 @@ def dashboard():
         </div>
     </div>
 
-    <!-- TAB 5: RPA MACRO STUDIO -->
+    <!-- TAB 8: RPA MACRO STUDIO -->
     <div id="tab-rpa" class="tab-panel">
         <div class="panel-container">
             <div class="panel-header">
@@ -1722,7 +2200,7 @@ def dashboard():
         </div>
     </div>
 
-    <!-- TAB 6: SYSTEM & HEALTH -->
+    <!-- TAB 9: SYSTEM & HEALTH -->
     <div id="tab-system" class="tab-panel">
         <div class="panel-container">
             <div class="panel-header">
@@ -1772,7 +2250,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         </div>
     </div>
 
-    <!-- TAB 7: BROWSER EXTENSION -->
+    <!-- TAB 10: BROWSER EXTENSION -->
     <div id="tab-browser" class="tab-panel">
         <div class="panel-container">
             <div class="panel-header">
@@ -1823,7 +2301,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         </div>
     </div>
 
-    <!-- TAB 8: AUDIT TRAIL -->
+    <!-- TAB 11: AUDIT TRAIL -->
     <div id="tab-logs" class="tab-panel">
         <div class="filter-bar">
             <div class="filter-chips">
@@ -1899,6 +2377,9 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
 
             if (tabId === 'desktop') refreshWindows();
             if (tabId === 'paper') checkPaperStatus();
+            if (tabId === 'shutdown') refreshShutdownStatus();
+            if (tabId === 'deals') refreshWatches();
+            if (tabId === 'channels') refreshChannels();
             if (tabId === 'rpa') refreshMacros();
             if (tabId === 'system') refreshSystemHealth();
         }
@@ -1979,9 +2460,9 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 data.windows.forEach(w => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${w.pid}</td>
+                        <td>${w.hwnd}</td>
                         <td style="font-weight: 600; color: var(--text-heading); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${w.title}</td>
-                        <td>${w.process_name}</td>
+                        <td>Active Window</td>
                         <td>Monitor ${w.monitor}</td>
                         <td style="font-family: monospace; font-size: 11px;">${w.width}x${w.height} @ (${w.x},${w.y})</td>
                         <td>
@@ -2061,7 +2542,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 } else {
                     btn.innerText = "🚨 ENGAGE EMERGENCY PANIC STOP";
                     btn.classList.add('btn-danger');
-                    topStat.innerText = "ARMED (Ctrl+Esc)";
+                    topStat.innerText = "READY";
                     topStat.style.color = "var(--accent-green)";
                     showToast("Emergency stop disengaged. System operational.");
                 }
@@ -2127,6 +2608,292 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 }
             } catch (e) {
                 alert('Paper error: ' + e);
+            }
+        }
+
+        // --- Smart Shutdown Logic ---
+        async function refreshShutdownStatus() {
+            try {
+                const res = await fetch('/api/shutdown/status');
+                const data = await res.json();
+                document.getElementById('sd-rate-val').innerText = `${data.current_rate_kbps || 0} KB/s`;
+                document.getElementById('sd-status-val').innerText = data.status || 'INACTIVE';
+                document.getElementById('sd-state-sub').innerText = data.message || 'Ready';
+                document.getElementById('sd-idle-val').innerText = `${data.idle_seconds || 0}s / ${data.idle_target_seconds || 120}s`;
+
+                const topStat = document.getElementById('top-stat-shutdown');
+                if (topStat) {
+                    topStat.innerText = data.status || 'INACTIVE';
+                    topStat.style.color = data.running ? 'var(--accent-gold)' : 'var(--text-muted)';
+                }
+
+                const btnStart = document.getElementById('btn-sd-start');
+                const btnCancel = document.getElementById('btn-sd-cancel');
+                if (data.running) {
+                    btnStart.style.display = 'none';
+                    btnCancel.style.display = 'inline-flex';
+                } else {
+                    btnStart.style.display = 'inline-flex';
+                    btnCancel.style.display = 'none';
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function startShutdownMonitor() {
+            const action = document.getElementById('sd-action').value;
+            const idleMin = parseInt(document.getElementById('sd-idle-min').value);
+            const idleKbps = parseFloat(document.getElementById('sd-idle-kbps').value);
+            const activeKbps = parseFloat(document.getElementById('sd-active-kbps').value);
+
+            try {
+                const res = await fetch('/api/shutdown/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: action,
+                        idle_minutes: idleMin,
+                        idle_kbps: idleKbps,
+                        active_kbps: activeKbps
+                    })
+                });
+                const data = await res.json();
+                showToast(data.message);
+                refreshShutdownStatus();
+            } catch (e) {
+                alert('Start shutdown error: ' + e);
+            }
+        }
+
+        async function cancelShutdownMonitor() {
+            try {
+                const res = await fetch('/api/shutdown/cancel', { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message);
+                refreshShutdownStatus();
+            } catch (e) {
+                alert('Cancel error: ' + e);
+            }
+        }
+
+        // --- Deal Finder & Watchlist Logic ---
+        async function executeDealSearch() {
+            const query = document.getElementById('deal-search-query').value.trim();
+            if (!query) {
+                alert('Please enter a product to search');
+                return;
+            }
+            const vendors = [];
+            if (document.getElementById('v-amazon').checked) vendors.push('amazon');
+            if (document.getElementById('v-newegg').checked) vendors.push('newegg');
+            if (document.getElementById('v-bestbuy').checked) vendors.push('bestbuy');
+            if (document.getElementById('v-walmart').checked) vendors.push('walmart');
+            if (document.getElementById('v-bhphoto').checked) vendors.push('bhphoto');
+            if (document.getElementById('v-microcenter').checked) vendors.push('microcenter');
+
+            const tbody = document.getElementById('deals-results-tbody');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-green); padding: 18px;">Scanning retailers (Amazon, Newegg, Best Buy...)...</td></tr>';
+
+            try {
+                const res = await fetch('/api/deals/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, vendors: vendors, max_results: 6 })
+                });
+                const data = await res.json();
+                tbody.innerHTML = '';
+                if (!data.deals || data.deals.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">No matching priced listings found. Try broader keywords.</td></tr>';
+                    return;
+                }
+                data.deals.forEach((d, idx) => {
+                    const row = document.createElement('tr');
+                    const badge = idx === 0 ? '<span style="color: var(--accent-gold); font-weight: 700; margin-left: 6px;">★ BEST DEAL</span>' : '';
+                    row.innerHTML = `
+                        <td style="font-weight: 700; color: var(--text-heading);">${d.vendor}</td>
+                        <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${d.title}</td>
+                        <td>$${d.price.toFixed(2)}</td>
+                        <td>${d.shipping ? '$' + d.shipping.toFixed(2) : 'Free / In-Store'}</td>
+                        <td style="font-weight: 700; color: var(--accent-green); font-size: 13px;">$${d.total.toFixed(2)}${badge}</td>
+                        <td><a href="${d.url}" target="_blank" class="btn-action" style="padding: 2px 8px; font-size: 10px; text-decoration: none;">View Item &rarr;</a></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                showToast(`Found ${data.deals.length} deals across vendors`);
+            } catch (e) {
+                alert('Search error: ' + e);
+            }
+        }
+
+        async function refreshWatches() {
+            try {
+                const res = await fetch('/api/deals/watches');
+                const data = await res.json();
+                const tbody = document.getElementById('watches-tbody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                if (!data.watches || data.watches.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 14px;">No active price watches.</td></tr>';
+                    return;
+                }
+                data.watches.forEach(w => {
+                    const targetStr = w.target_price ? `$${w.target_price.toFixed(2)}` : 'Any Drop';
+                    const bestStr = w.last_best_total ? `$${w.last_best_total.toFixed(2)}` : 'N/A';
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="font-family: monospace;">${w.id}</td>
+                        <td style="font-weight: 600; color: var(--text-heading);">${w.query}</td>
+                        <td style="color: var(--accent-gold);">${targetStr}</td>
+                        <td style="color: var(--accent-green); font-weight: 700;">${bestStr}</td>
+                        <td>${w.last_best_vendor || 'N/A'}</td>
+                        <td>${w.last_checked_at ? w.last_checked_at.slice(0, 19).replace('T', ' ') : 'Never'}</td>
+                        <td>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn-action" style="padding: 2px 6px; font-size: 10px;" onclick="checkWatchNow('${w.id}')">Scan</button>
+                                <button class="btn-action btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="deleteWatch('${w.id}')">&times;</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function createDealWatch() {
+            const query = document.getElementById('watch-query').value.trim();
+            const target = document.getElementById('watch-target').value;
+            if (!query) {
+                alert('Please enter a product query');
+                return;
+            }
+            try {
+                const res = await fetch('/api/deals/watches/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, target_price: target ? parseFloat(target) : null })
+                });
+                const data = await res.json();
+                showToast(`Created Deal Watch: ${query}`);
+                document.getElementById('watch-query').value = '';
+                document.getElementById('watch-target').value = '';
+                refreshWatches();
+            } catch (e) {
+                alert('Watch error: ' + e);
+            }
+        }
+
+        async function deleteWatch(id) {
+            try {
+                await fetch('/api/deals/watches/remove', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ watch_id: id })
+                });
+                showToast('Removed deal watch');
+                refreshWatches();
+            } catch (e) {
+                alert('Delete error: ' + e);
+            }
+        }
+
+        async function checkWatchNow(id) {
+            showToast('Scanning retailer prices...');
+            try {
+                const res = await fetch('/api/deals/watches/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ watch_id: id })
+                });
+                const data = await res.json();
+                if (data.best_deal) {
+                    showToast(`Scanned: Best price $${data.best_deal.total.toFixed(2)} on ${data.best_deal.vendor}`);
+                } else {
+                    showToast('Scan complete (no new prices)');
+                }
+                refreshWatches();
+            } catch (e) {
+                alert('Scan error: ' + e);
+            }
+        }
+
+        // --- Multi-Channel Gateways Logic ---
+        async function refreshChannels() {
+            try {
+                const res = await fetch('/api/channels/status');
+                const data = await res.json();
+
+                const updatePill = (id, active) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (active) {
+                        el.innerText = 'ONLINE';
+                        el.className = 'status-pill';
+                    } else {
+                        el.innerText = 'STANDBY';
+                        el.className = 'status-pill offline';
+                    }
+                };
+
+                updatePill('st-discord', data.discord?.enabled);
+                updatePill('st-slack', data.slack?.enabled);
+                updatePill('st-whatsapp', data.whatsapp?.enabled);
+                updatePill('st-telegram', data.telegram?.enabled);
+                updatePill('st-relay', data.relay?.enabled);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function submitPairing() {
+            const ch = document.getElementById('pair-channel').value;
+            const code = document.getElementById('pair-code').value.trim();
+            if (!code || code.length !== 6) {
+                alert('Please enter a 6-digit pairing code');
+                return;
+            }
+            try {
+                const res = await fetch('/api/channels/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel: ch, code: code })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    showToast(`✅ ${data.message}`);
+                    document.getElementById('pair-code').value = '';
+                } else {
+                    alert('Pairing error: ' + data.message);
+                }
+            } catch (e) {
+                alert('Pairing error: ' + e);
+            }
+        }
+
+        async function simulateChannelMessage() {
+            const ch = document.getElementById('sim-channel').value;
+            const prompt = document.getElementById('sim-prompt').value.trim();
+            if (!prompt) {
+                alert('Please enter a prompt to simulate');
+                return;
+            }
+            const out = document.getElementById('sim-output');
+            out.style.display = 'block';
+            out.innerText = `[${ch.toUpperCase()}] Routing to Hermes Agent...`;
+
+            try {
+                const res = await fetch('/api/channels/simulate_test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel: ch, prompt: prompt })
+                });
+                const data = await res.json();
+                out.innerText = `[${ch.toUpperCase()} REPLY]\n${data.response}`;
+                showToast(`Dispatched via ${ch}`);
+            } catch (e) {
+                out.innerText = `Error: ${e}`;
             }
         }
 

@@ -194,3 +194,9 @@ infographics/
 infograficos/
 infografico/
 native/fts5_cjk/*.so
+
+# Hermes Local Lab Runtime Stores
+local_model_lab/deal_watches.json
+local_model_lab/channel_allowlist.json
+local_model_lab/employee_logs/*.json
+
