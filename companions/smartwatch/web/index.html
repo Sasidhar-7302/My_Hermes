@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hermes Watch HUD</title>
+    <link rel="manifest" href="/companions/smartwatch/manifest.json">
+    <link rel="stylesheet" href="/companions/smartwatch/web/watch.css">
+</head>
+<body>
+    <div class="watch-display">
+        <!-- Toast popup overlay -->
+        <div id="watch-toast" class="watch-toast">Wrist Connected</div>
+
+        <!-- Header -->
+        <div class="watch-header">
+            <div class="status-badge">
+                <span id="status-dot" class="status-dot"></span>
+                <span>HERMES WATCH HUD</span>
+            </div>
+            <div id="watch-clock" class="watch-clock">12:00</div>
+        </div>
+
+        <!-- Controls -->
+        <div class="watch-controls">
+            <button id="voice-btn" class="watch-btn" onclick="startVoicePrompt()">
+                🎙️ <span>Talk to Hermes</span>
+            </button>
+            <button class="watch-btn" onclick="grabPcClipboard()">
+                📋 <span>Grab PC Clip</span>
+            </button>
+            <button class="watch-btn panic" onclick="panicStop()">
+                🚨 <span>PANIC STOP</span>
+            </button>
+        </div>
+
+        <!-- Status / Agent Response Footer -->
+        <div id="watch-footer" class="watch-footer">
+            Ready on wrist
+        </div>
+    </div>
+
+    <script src="/companions/smartwatch/web/watch.js"></script>
+</body>
+</html>

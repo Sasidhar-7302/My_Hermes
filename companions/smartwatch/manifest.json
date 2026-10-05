@@ -1,0 +1,16 @@
+{
+  "name": "Hermes Watch HUD",
+  "short_name": "Hermes Watch",
+  "start_url": "/companions/smartwatch",
+  "display": "fullscreen",
+  "orientation": "natural",
+  "background_color": "#000000",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23000000' stroke='%2310b981' stroke-width='4'/><path d='M35 50 L50 30 L65 50 L50 70 Z' fill='%2310b981'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

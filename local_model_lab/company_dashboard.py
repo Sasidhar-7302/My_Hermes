@@ -20,6 +20,11 @@ _cur_dir = os.path.dirname(os.path.abspath(__file__))
 if _cur_dir not in sys.path:
     sys.path.insert(0, _cur_dir)
 
+_parent_dir = os.path.dirname(_cur_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
@@ -192,38 +197,30 @@ except ImportError:
 
 # ── OMNI-MESH CROSS-DEVICE IMPORTS ──────────────────────────────────────────
 try:
-    from local_model_lab.omni_mesh import (
+    from companions import (
         get_omni_mesh_hub,
         read_pc_clipboard,
         write_pc_clipboard,
-    )
-    from local_model_lab.companion_web import (
-        render_companion_html,
-        MANIFEST_JSON,
-        SERVICE_WORKER_JS,
+        register_companion_routes,
     )
 except ImportError:
     try:
-        from omni_mesh import (
+        from local_model_lab.omni_mesh import (
             get_omni_mesh_hub,
             read_pc_clipboard,
             write_pc_clipboard,
         )
-        from companion_web import (
-            render_companion_html,
-            MANIFEST_JSON,
-            SERVICE_WORKER_JS,
-        )
+        from companions import register_companion_routes
     except Exception:
         get_omni_mesh_hub = lambda: None
         read_pc_clipboard = lambda: ""
         write_pc_clipboard = lambda t: False
-        render_companion_html = lambda h, p: "<html><body>Hermes Companion</body></html>"
-        MANIFEST_JSON = {}
-        SERVICE_WORKER_JS = ""
+        register_companion_routes = lambda a: None
 
 
 app = FastAPI(title="Hermes Agent Operations Center")
+register_companion_routes(app)
+
 
 ROLE_META = {
     "CEO": {
@@ -688,23 +685,6 @@ async def api_channels_simulate_test(request: Request):
 
 # ── OMNI-MESH CROSS-DEVICE API & PWA ────────────────────────────────────────
 
-@app.get("/companion", response_class=HTMLResponse)
-async def get_companion_page():
-    hub = get_omni_mesh_hub()
-    ip = hub.lan_ip if hub else "127.0.0.1"
-    port = hub.port if hub else 8000
-    return HTMLResponse(content=render_companion_html(ip, port))
-
-
-@app.get("/companion/manifest.json")
-async def get_companion_manifest():
-    return JSONResponse(content=MANIFEST_JSON)
-
-
-@app.get("/companion/sw.js")
-async def get_companion_sw():
-    from fastapi import Response
-    return Response(content=SERVICE_WORKER_JS, media_type="application/javascript")
 
 
 @app.websocket("/api/mesh/ws")
@@ -2277,9 +2257,9 @@ def dashboard():
                         </div>
                     </div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                        <a id="btn-open-phone" href="/companion?mode=phone" target="_blank" class="btn-action" style="text-decoration: none;">📱 Open Mobile View</a>
-                        <a id="btn-open-watch" href="/companion?mode=watch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Open Watch HUD</a>
-                        <a id="btn-open-laptop" href="/companion?mode=laptop" target="_blank" class="btn-action" style="text-decoration: none;">💻 Open Laptop View</a>
+                        <a id="btn-open-phone" href="/companions/smartphone" target="_blank" class="btn-action" style="text-decoration: none;">📱 Open Mobile View</a>
+                        <a id="btn-open-watch" href="/companions/smartwatch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Open Watch HUD</a>
+                        <a id="btn-open-laptop" href="/companions/laptop" target="_blank" class="btn-action" style="text-decoration: none;">💻 Open Laptop View</a>
                         <button class="btn-action" onclick="refreshMeshDevices()">🔄 Refresh Mesh</button>
                     </div>
                 </div>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hermes Laptop Workstation</title>
+    <link rel="manifest" href="/companions/laptop/manifest.json">
+    <link rel="stylesheet" href="/companions/laptop/web/laptop.css">
+</head>
+<body>
+    <div id="toast-banner">Connected to Hermes PC</div>
+
+    <!-- Header -->
+    <div class="workstation-header">
+        <div class="brand-section">
+            <div id="status-orb" class="status-orb"></div>
+            <div>
+                <div style="font-size: 15px; font-weight: 800; color: #ffffff;">HERMES LAPTOP WORKSTATION</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Omni-Mesh Secondary Node</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div id="laptop-battery" style="font-size: 12px; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 10px; border-radius: 6px;">
+                🔋 --%
+            </div>
+            <button class="btn-action" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="triggerPanicStop()">
+                🚨 Emergency Panic Stop
+            </button>
+        </div>
+    </div>
+
+    <!-- 3-Pane Workstation Container -->
+    <div class="workspace-container">
+        <!-- Pane 1: Cross-Device Clipboard -->
+        <div class="pane">
+            <div class="pane-title">📋 Shared Cross-PC Clipboard</div>
+            <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                Text typed or pasted here is synchronized in real-time with the Windows clipboard on your Desktop PC:
+            </p>
+            <textarea id="clip-area" class="input-box" style="height: 140px; resize: none;" placeholder="Type or paste to share clipboard across machines..."></textarea>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-action" style="flex: 1;" onclick="pushClipboard()">⬆️ Push to PC</button>
+                <button class="btn-action" style="flex: 1;" onclick="pullClipboard()">⬇️ Pull from PC</button>
+            </div>
+        </div>
+
+        <!-- Pane 2: Live Activity & Task Stream -->
+        <div class="pane" style="background: var(--bg-base);">
+            <div class="pane-title">⚡ Live Operations & Telemetry Stream</div>
+            <div id="log-feed" class="task-feed">
+                <div>[HERMES MESH] Laptop workstation bridge active. Ready to route commands and synchronized state.</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="prompt-input" class="input-box" placeholder="Dispatch prompt or action to Hermes Desktop Core..." onkeydown="if(event.key==='Enter') sendLaptopPrompt()">
+                <button class="btn-action" style="width: 70px;" onclick="sendLaptopPrompt()">Send ➤</button>
+            </div>
+        </div>
+
+        <!-- Pane 3: Node Actions & Info -->
+        <div class="pane">
+            <div class="pane-title">🖥️ Ecosystem Node Info</div>
+            <div style="background: var(--bg-input); padding: 12px; border-radius: 6px; font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+                <div style="color: var(--text-muted);">Node Type: <strong style="color: #ffffff;">Secondary Laptop</strong></div>
+                <div style="color: var(--text-muted);">Protocol: <strong style="color: var(--accent-emerald);">WebSocket (Omni-Mesh)</strong></div>
+                <div style="color: var(--text-muted);">Sync Mode: <strong style="color: #ffffff;">Bidirectional Clipboard + Tasks</strong></div>
+            </div>
+
+            <div class="pane-title" style="margin-top: 10px;">📦 Standalone Python Worker</div>
+            <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                Want this laptop to execute terminal commands autonomously for Hermes? Run the standalone worker script:
+            </p>
+            <div style="background: #000; border: 1px solid var(--border-subtle); padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; color: var(--accent-emerald); user-select: all;">
+                python worker.py --host 10.0.0.60
+            </div>
+        </div>
+    </div>
+
+    <script src="/companions/laptop/web/laptop.js"></script>
+</body>
+</html>

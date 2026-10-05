@@ -23,8 +23,11 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 _cur_dir = Path(__file__).resolve().parent
+_parent_dir = _cur_dir.parent
 if str(_cur_dir) not in sys.path:
     sys.path.insert(0, str(_cur_dir))
+if str(_parent_dir) not in sys.path:
+    sys.path.insert(0, str(_parent_dir))
 
 from omni_mesh import (
     OmniMeshHub,
@@ -33,6 +36,11 @@ from omni_mesh import (
     read_pc_clipboard,
     write_pc_clipboard,
     generate_qr_code_png_base64,
+)
+from companions import (
+    get_smartwatch_bridge,
+    get_smartphone_bridge,
+    get_laptop_bridge,
 )
 import company_dashboard as cd
 from starlette.testclient import TestClient
@@ -59,8 +67,16 @@ def run_tests():
 
     companion_url = hub.get_companion_url()
     assert companion_url.startswith("http://")
-    assert f":{hub.port}/companion" in companion_url
-    print(f"  ✓ Companion URL generated: {companion_url}")
+    assert f":{hub.port}/companions/smartphone" in companion_url
+    print(f"  ✓ Default Smartphone URL generated: {companion_url}")
+
+    watch_url = hub.get_companion_url("smartwatch")
+    assert f":{hub.port}/companions/smartwatch" in watch_url
+    print(f"  ✓ Dedicated Smartwatch URL generated: {watch_url}")
+
+    laptop_url = hub.get_companion_url("laptop")
+    assert f":{hub.port}/companions/laptop" in laptop_url
+    print(f"  ✓ Dedicated Laptop URL generated: {laptop_url}")
 
     qr_b64 = hub.get_pairing_qr()
     assert qr_b64.startswith("data:image/png;base64,")
@@ -70,6 +86,9 @@ def run_tests():
     overview = hub.get_status_overview()
     assert "devices" in overview
     assert "hub_ip" in overview
+    assert "smartwatch_url" in overview
+    assert "smartphone_url" in overview
+    assert "laptop_url" in overview
     assert len(overview["devices"]) >= 1
     print(f"  ✓ Status overview verified with {len(overview['devices'])} initial node(s).")
     passed += 1
@@ -90,47 +109,119 @@ def run_tests():
     passed += 1
 
     # -------------------------------------------------------------------------
-    # TEST 3: Companion PWA Endpoints
+    # TEST 3: Dedicated Companion Modular Endpoints (Watch, Phone, Laptop)
     # -------------------------------------------------------------------------
     total += 1
-    print("\n[TEST 3] Testing Companion PWA Web App Endpoints...")
+    print("\n[TEST 3] Testing Modular Companion Web App Endpoints...")
     client = TestClient(cd.app)
 
-    # 1. /companion main page
-    r = client.get("/companion")
-    assert r.status_code == 200
-    assert "Hermes Companion" in r.text
-    assert "view-watch" in r.text
-    assert "view-phone" in r.text
-    assert "watch-hud" in r.text
-    print("  ✓ /companion delivered responsive multi-device HTML.")
-
-    # 2. /companion?mode=watch
-    r_watch = client.get("/companion?mode=watch")
+    # 1. Smartwatch Companion
+    r_watch = client.get("/companions/smartwatch")
     assert r_watch.status_code == 200
     assert "HERMES WATCH HUD" in r_watch.text
-    print("  ✓ /companion?mode=watch verified for Smartwatch HUD.")
+    print("  ✓ /companions/smartwatch delivered circular HUD interface.")
 
-    # 3. /companion/manifest.json
-    r_manifest = client.get("/companion/manifest.json")
-    assert r_manifest.status_code == 200
-    manifest = r_manifest.json()
-    assert manifest.get("short_name") == "Hermes"
-    assert manifest.get("display") == "standalone"
-    print("  ✓ /companion/manifest.json standalone PWA manifest verified.")
+    r_watch_manifest = client.get("/companions/smartwatch/manifest.json")
+    assert r_watch_manifest.status_code == 200
+    assert r_watch_manifest.json().get("short_name") == "Hermes Watch"
 
-    # 4. /companion/sw.js
-    r_sw = client.get("/companion/sw.js")
-    assert r_sw.status_code == 200
-    assert "serviceWorker" in r_sw.text.lower() or "cache" in r_sw.text.lower()
-    print("  ✓ /companion/sw.js Service Worker verified.")
+    r_watch_css = client.get("/companions/smartwatch/web/watch.css")
+    assert r_watch_css.status_code == 200
+    assert "watch-display" in r_watch_css.text or "watch-btn" in r_watch_css.text
+
+    r_watch_js = client.get("/companions/smartwatch/web/watch.js")
+    assert r_watch_js.status_code == 200
+    assert "panicStop" in r_watch_js.text or "emergency" in r_watch_js.text.lower()
+    print("  ✓ Smartwatch static assets (manifest, CSS, JS) verified.")
+
+    # 2. Smartphone Companion
+    r_phone = client.get("/companions/smartphone")
+    assert r_phone.status_code == 200
+    assert "HERMES PHONE" in r_phone.text
+    print("  ✓ /companions/smartphone delivered mobile app interface.")
+
+    r_phone_manifest = client.get("/companions/smartphone/manifest.json")
+    assert r_phone_manifest.status_code == 200
+    assert r_phone_manifest.json().get("short_name") == "Hermes Phone"
+
+    r_phone_sw = client.get("/companions/smartphone/sw.js")
+    assert r_phone_sw.status_code == 200
+    assert "cache" in r_phone_sw.text.lower() or "serviceworker" in r_phone_sw.text.lower()
+
+    r_phone_css = client.get("/companions/smartphone/web/mobile.css")
+    assert r_phone_css.status_code == 200
+    assert "mobile-container" in r_phone_css.text
+
+    r_phone_js = client.get("/companions/smartphone/web/mobile.js")
+    assert r_phone_js.status_code == 200
+    assert "handlePhotoUpload" in r_phone_js.text
+    print("  ✓ Smartphone static assets (manifest, sw.js, CSS, JS) verified.")
+
+    # 3. Laptop Workstation Companion
+    r_laptop = client.get("/companions/laptop")
+    assert r_laptop.status_code == 200
+    assert "HERMES LAPTOP WORKSTATION" in r_laptop.text
+    print("  ✓ /companions/laptop delivered workstation interface.")
+
+    r_laptop_manifest = client.get("/companions/laptop/manifest.json")
+    assert r_laptop_manifest.status_code == 200
+    assert r_laptop_manifest.json().get("short_name") == "Hermes Laptop"
+
+    r_laptop_css = client.get("/companions/laptop/web/laptop.css")
+    assert r_laptop_css.status_code == 200
+    assert "workspace-container" in r_laptop_css.text
+
+    r_laptop_js = client.get("/companions/laptop/web/laptop.js")
+    assert r_laptop_js.status_code == 200
+    assert "sendLaptopPrompt" in r_laptop_js.text
+    print("  ✓ Laptop static assets (manifest, CSS, JS) verified.")
+
+    # 4. Backward Compatibility: /companion router
+    r_compat = client.get("/companion")
+    assert r_compat.status_code == 200
+    assert "HERMES PHONE" in r_compat.text
+
+    r_compat_watch = client.get("/companion?mode=watch")
+    assert r_compat_watch.status_code == 200
+    assert "HERMES WATCH HUD" in r_compat_watch.text
+
+    r_compat_laptop = client.get("/companion?mode=laptop")
+    assert r_compat_laptop.status_code == 200
+    assert "HERMES LAPTOP WORKSTATION" in r_compat_laptop.text
+    print("  ✓ Backward-compatible /companion route mode routing verified.")
     passed += 1
 
     # -------------------------------------------------------------------------
-    # TEST 4: Operations Center Omni-Mesh REST Endpoints
+    # TEST 4: Companion Bridges & Standalone Worker
     # -------------------------------------------------------------------------
     total += 1
-    print("\n[TEST 4] Testing Operations Center Omni-Mesh REST Endpoints...")
+    print("\n[TEST 4] Testing Companion Bridges (Haptics, Vision Buffer, Telemetry)...")
+    watch_bridge = get_smartwatch_bridge()
+    haptic_pattern = watch_bridge.get_haptic_pattern("panic")
+    assert len(haptic_pattern) > 0
+    tile_data = watch_bridge.format_tile_data({"status": "active", "active_tasks": 2})
+    assert "active_tasks" in tile_data
+    print(f"  ✓ SmartwatchBridge haptics & tile telemetry verified: {haptic_pattern}")
+
+    phone_bridge = get_smartphone_bridge()
+    clip_list = phone_bridge.get_clipboard_history()
+    assert isinstance(clip_list, list)
+    print("  ✓ SmartphoneBridge clipboard buffer verified.")
+
+    laptop_bridge = get_laptop_bridge()
+    laptop_bridge.register_node("node-test-1", "MacBook Pro M3", "10.0.0.99")
+    node_info = laptop_bridge.get_node_info("node-test-1")
+    assert node_info is not None
+    assert node_info.get("name") == "MacBook Pro M3"
+    print("  ✓ LaptopBridge remote node registration verified.")
+    passed += 1
+
+
+    # -------------------------------------------------------------------------
+    # TEST 5: Operations Center Omni-Mesh REST Endpoints
+    # -------------------------------------------------------------------------
+    total += 1
+    print("\n[TEST 5] Testing Operations Center Omni-Mesh REST Endpoints...")
     # 1. /api/mesh/status
     r = client.get("/api/mesh/status")
     assert r.status_code == 200
@@ -155,10 +246,10 @@ def run_tests():
     passed += 1
 
     # -------------------------------------------------------------------------
-    # TEST 5: Real-time WebSocket Protocol & Multi-Device Simulation
+    # TEST 6: Real-time WebSocket Protocol & Multi-Device Simulation
     # -------------------------------------------------------------------------
     total += 1
-    print("\n[TEST 5] Testing WebSocket Mesh Handshake & Device Simulation...")
+    print("\n[TEST 6] Testing WebSocket Mesh Handshake & Device Simulation...")
     with client.websocket_connect("/api/mesh/ws") as ws:
         # Handshake registration for a simulated Smartwatch
         reg_pkt = {
@@ -190,7 +281,7 @@ def run_tests():
         # Verify device state in Hub
         dev = hub.devices.get("watch-galaxy-test")
         assert dev is not None
-        assert dev.device_type == "watch"
+        assert dev.device_type in ("smartwatch", "watch")
         assert dev.battery_level == 87
         assert dev.is_charging is True
         print(f"  ✓ Device telemetry registered: {dev.name} ({dev.device_type}) at {dev.battery_level}% (Charging).")

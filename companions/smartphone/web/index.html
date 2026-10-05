@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#070a0d">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Hermes Smartphone Companion</title>
+    <link rel="manifest" href="/companions/smartphone/manifest.json">
+    <link rel="stylesheet" href="/companions/smartphone/web/mobile.css">
+</head>
+<body>
+    <div id="toast-banner">Hermes Connected</div>
+
+    <div class="mobile-container">
+        <!-- Header -->
+        <div class="app-header">
+            <div class="brand-badge">
+                <div class="pulse-orb" id="connection-orb"></div>
+                <div>
+                    <div style="font-size: 14px; font-weight: 700; color: #ffffff;">HERMES PHONE</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">Omni-Mesh Mobile Node</div>
+                </div>
+            </div>
+            <div id="battery-tag" style="font-size: 11px; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
+                🔋 --%
+            </div>
+        </div>
+
+        <!-- Unified Clipboard Card -->
+        <div class="card">
+            <div class="card-title">
+                📋 Cross-Device Unified Clipboard
+            </div>
+            <textarea id="clip-text" class="text-input" style="height: 65px; resize: none;" placeholder="Type or paste to sync with PC clipboard..."></textarea>
+            <div class="btn-grid">
+                <button class="action-btn" onclick="pushClipboard()">
+                    <span>⬆️ Push to PC</span>
+                </button>
+                <button class="action-btn" onclick="pullClipboard()">
+                    <span>⬇️ Pull from PC</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Camera Vision & Voice Card -->
+        <div class="card">
+            <div class="card-title">
+                📸 Sensors & Vision Bridge
+            </div>
+            <div class="btn-grid">
+                <label class="action-btn" style="cursor: pointer;">
+                    <input type="file" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this)">
+                    <span>📷 Snap for Vision</span>
+                </label>
+                <button class="action-btn" id="mic-btn" onclick="toggleVoicePrompt()">
+                    <span>🎙️ Push to Talk</span>
+                </button>
+            </div>
+            <button class="action-btn danger" onclick="triggerPanicStop()">
+                <span>🚨 Emergency Panic Stop</span>
+            </button>
+        </div>
+
+        <!-- Live Agent Chat Card -->
+        <div class="card" style="flex: 1;">
+            <div class="card-title">
+                ⚡ Hermes Dispatch Stream
+            </div>
+            <div class="chat-stream" id="chat-stream">
+                <div class="msg-bubble hermes">
+                    Connected to Hermes Core. You can send prompts, push photos, or sync your clipboard seamlessly.
+                </div>
+            </div>
+            <div class="input-bar">
+                <input type="text" id="chat-input" class="text-input" placeholder="Ask Hermes or trigger action..." onkeydown="if(event.key==='Enter') sendPrompt()">
+                <button class="action-btn" style="width: 50px;" onclick="sendPrompt()">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/companions/smartphone/web/mobile.js"></script>
+</body>
+</html>
