@@ -12,31 +12,59 @@
         <!-- Toast popup overlay -->
         <div id="watch-toast" class="watch-toast">Wrist Connected</div>
 
-        <!-- Header -->
+        <!-- Top Header Arc: Time, Connectivity, Battery -->
         <div class="watch-header">
-            <div class="status-badge">
-                <span id="status-dot" class="status-dot"></span>
-                <span>HERMES WATCH HUD</span>
+            <div class="header-top">
+                <div class="status-badge">
+                    <span id="status-dot" class="status-dot"></span>
+                    <span id="status-text">HERMES WATCH HUD</span>
+                </div>
+                <div id="battery-pill" class="battery-pill">🔋 --%</div>
             </div>
             <div id="watch-clock" class="watch-clock">12:00</div>
         </div>
 
-        <!-- Controls -->
-        <div class="watch-controls">
-            <button id="voice-btn" class="watch-btn" onclick="startVoicePrompt()">
-                🎙️ <span>Talk to Hermes</span>
+        <!-- Center Hero: Push to Send Voice Note Core -->
+        <div class="voice-hero">
+            <div class="voice-ripple-container">
+                <div class="voice-ripple r1"></div>
+                <div class="voice-ripple r2"></div>
+                <button id="voice-core-btn" class="voice-core-btn" aria-label="Push to send voice note">
+                    <div class="sound-wave" id="sound-wave">
+                        <span class="bar b1"></span>
+                        <span class="bar b2"></span>
+                        <span class="bar b3"></span>
+                        <span class="bar b4"></span>
+                        <span class="bar b5"></span>
+                    </div>
+                    <span class="mic-icon" id="mic-icon">🎙️</span>
+                </button>
+            </div>
+            <div id="voice-caption" class="voice-caption">Hold to Talk</div>
+        </div>
+
+        <!-- Flanking Essential Bottom Action Chips -->
+        <div class="watch-actions">
+            <button class="action-chip" onclick="grabPcClipboard()" title="Grab PC Clipboard">
+                <span class="chip-icon">📋</span>
+                <span class="chip-label">Clip</span>
             </button>
-            <button class="watch-btn" onclick="grabPcClipboard()">
-                📋 <span>Grab PC Clip</span>
-            </button>
-            <button class="watch-btn panic" onclick="panicStop()">
-                🚨 <span>PANIC STOP</span>
+            <button class="action-chip panic" onclick="panicStop()" title="Emergency Panic Stop">
+                <span class="chip-icon">🚨</span>
+                <span class="chip-label">Stop</span>
             </button>
         </div>
 
-        <!-- Status / Agent Response Footer -->
-        <div id="watch-footer" class="watch-footer">
-            Ready on wrist
+        <!-- Slide-up Agent Reply Modal -->
+        <div id="reply-modal" class="reply-modal" onclick="dismissReplyModal()">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <span class="modal-tag">⚡ HERMES REPLY</span>
+                    <span class="modal-close">&times;</span>
+                </div>
+                <div id="reply-text" class="reply-text">Ready on wrist</div>
+                <div class="modal-hint">Tap anywhere to dismiss</div>
+            </div>
         </div>
     </div>
 
