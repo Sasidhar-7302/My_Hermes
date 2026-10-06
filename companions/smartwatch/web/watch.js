@@ -6,6 +6,15 @@ let ws = null;
 let deviceId = localStorage.getItem('hermes_watch_id') || ('watch-' + Math.random().toString(36).substring(2, 8));
 localStorage.setItem('hermes_watch_id', deviceId);
 
+// Pairing & Authentication token management
+const urlParams = new URLSearchParams(window.location.search);
+const pairParam = urlParams.get('pair') || urlParams.get('pairing_code');
+const tokenParam = urlParams.get('token');
+if (tokenParam) {
+    localStorage.setItem('hermes_watch_token', tokenParam);
+}
+let authToken = localStorage.getItem('hermes_watch_token') || tokenParam || '';
+
 let isListening = false;
 let recognition = null;
 
@@ -57,24 +66,40 @@ if ('getBattery' in navigator) {
 
 // WebSocket Connection
 function connectWatch() {
-    ws = new WebSocket(WS_URL);
+    let wsUrl = WS_URL;
+    const q = [];
+    if (authToken) q.push(`token=${encodeURIComponent(authToken)}`);
+    if (pairParam) q.push(`pair=${encodeURIComponent(pairParam)}`);
+    if (q.length > 0) wsUrl += `?${q.join('&')}`;
+
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
         document.getElementById('status-dot').style.background = '#10b981';
         showWatchToast('Wrist Connected');
         vibrate([80]);
 
-        ws.send(JSON.stringify({
+        const regPayload = {
             type: 'register',
             device_id: deviceId,
             name: 'Smartwatch HUD',
             device_type: 'smartwatch',
             user_agent: navigator.userAgent
-        }));
+        };
+        if (authToken) regPayload.token = authToken;
+        if (pairParam) regPayload.pair = pairParam;
+        ws.send(JSON.stringify(regPayload));
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         document.getElementById('status-dot').style.background = '#ef4444';
+        if (event && event.code === 4001) {
+            showWatchToast('⚠️ Pair from PC');
+            const footer = document.getElementById('watch-footer');
+            if (footer) footer.innerText = 'Pairing required on PC dashboard';
+            setTimeout(connectWatch, 8000);
+            return;
+        }
         setTimeout(connectWatch, 3000);
     };
 
@@ -90,7 +115,21 @@ function connectWatch() {
 
 function handleIncomingPacket(data) {
     const footer = document.getElementById('watch-footer');
-    if (data.type === 'notification') {
+    if (data.type === 'welcome') {
+        if (data.auth_token) {
+            authToken = data.auth_token;
+            localStorage.setItem('hermes_watch_token', authToken);
+            if (pairParam && window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+        if (footer) footer.innerText = 'Ready on wrist';
+    } else if (data.type === 'auth_error') {
+        showWatchToast('❌ Unpaired');
+        if (footer) footer.innerText = 'Pair with PC QR code';
+        localStorage.removeItem('hermes_watch_token');
+        authToken = '';
+    } else if (data.type === 'notification') {
         showWatchToast(data.title || 'Notification');
         vibrate(data.vibrate || [100, 50, 100]);
         if (footer) footer.innerText = data.body || '';

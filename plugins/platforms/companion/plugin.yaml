@@ -1,0 +1,14 @@
+name: companion-platform
+label: Companion Ecosystem
+kind: platform
+version: 1.0.0
+description: >
+  Omni-Mesh companion platform adapter for Hermes Agent.
+  Connects Smartwatch, Smartphone, and Laptop companion devices directly into
+  the Hermes Agent Gateway with real sessions, tool invocation, and memory.
+author: Nous Research
+optional_env:
+  - name: COMPANION_ALLOW_ALL_USERS
+    description: "Allow all paired companion devices to interact with Hermes (default: true)"
+    prompt: "Allow all paired devices? (true/false)"
+    password: false

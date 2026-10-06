@@ -6,6 +6,41 @@ let ws = null;
 let deviceId = localStorage.getItem('hermes_laptop_id') || ('laptop-' + Math.random().toString(36).substring(2, 9));
 localStorage.setItem('hermes_laptop_id', deviceId);
 
+// Pairing & Authentication token management
+const urlParams = new URLSearchParams(window.location.search);
+const pairParam = urlParams.get('pair') || urlParams.get('pairing_code');
+const tokenParam = urlParams.get('token');
+if (tokenParam) {
+    localStorage.setItem('hermes_laptop_token', tokenParam);
+}
+let authToken = localStorage.getItem('hermes_laptop_token') || tokenParam || '';
+
+let deferredInstallPrompt = null;
+
+// PWA Install prompt listener
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const installBtn = document.getElementById('pwa-install-btn');
+    if (installBtn) {
+        installBtn.style.display = 'inline-flex';
+    }
+});
+
+function promptInstallApp() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+                showToast('Hermes Workstation app installed!');
+            }
+            deferredInstallPrompt = null;
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'none';
+        });
+    }
+}
+
 function showToast(msg) {
     const t = document.getElementById('toast-banner');
     if (t) {
@@ -37,22 +72,37 @@ if ('getBattery' in navigator) {
 }
 
 function connectLaptop() {
-    ws = new WebSocket(WS_URL);
+    let wsUrl = WS_URL;
+    const q = [];
+    if (authToken) q.push(`token=${encodeURIComponent(authToken)}`);
+    if (pairParam) q.push(`pair=${encodeURIComponent(pairParam)}`);
+    if (q.length > 0) wsUrl += `?${q.join('&')}`;
+
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
         document.getElementById('status-orb').style.background = '#10b981';
         showToast('Laptop Connected to Hermes PC Hub');
-        ws.send(JSON.stringify({
+        const regPayload = {
             type: 'register',
             device_id: deviceId,
             name: 'Laptop Workstation',
             device_type: 'laptop',
             user_agent: navigator.userAgent
-        }));
+        };
+        if (authToken) regPayload.token = authToken;
+        if (pairParam) regPayload.pair = pairParam;
+        ws.send(JSON.stringify(regPayload));
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         document.getElementById('status-orb').style.background = '#ef4444';
+        if (event && event.code === 4001) {
+            showToast('⚠️ Unauthorized. Please pair from PC dashboard.');
+            appendLog('AUTH', 'Pairing required. Scan QR code or enter code from PC.');
+            setTimeout(connectLaptop, 8000);
+            return;
+        }
         setTimeout(connectLaptop, 3000);
     };
 
@@ -68,10 +118,22 @@ function connectLaptop() {
 
 function handleIncoming(data) {
     if (data.type === 'welcome') {
+        if (data.auth_token) {
+            authToken = data.auth_token;
+            localStorage.setItem('hermes_laptop_token', authToken);
+            if (pairParam && window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
         if (data.pc_clipboard) {
             document.getElementById('clip-area').value = data.pc_clipboard;
         }
         appendLog('SYSTEM', `Handshake verified. Host IP: ${data.host_ip}`);
+    } else if (data.type === 'auth_error') {
+        showToast('❌ ' + (data.message || 'Authentication error'));
+        appendLog('AUTH_ERROR', data.message || 'Device not authorized');
+        localStorage.removeItem('hermes_laptop_token');
+        authToken = '';
     } else if (data.type === 'clipboard_update') {
         document.getElementById('clip-area').value = data.content || '';
         showToast('📋 Clipboard updated from PC');

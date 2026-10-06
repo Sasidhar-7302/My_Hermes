@@ -702,6 +702,10 @@ async def websocket_mesh_endpoint(websocket: WebSocket):
             init_data = json.loads(raw)
         except Exception:
             init_data = {}
+
+        token = init_data.get("token") or websocket.query_params.get("token")
+        pair_code = init_data.get("pairing_code") or init_data.get("pair") or websocket.query_params.get("pair")
+
         import uuid
         dev_id = str(init_data.get("device_id") or str(uuid.uuid4())[:8])
         device = await hub.register_connection(
@@ -713,8 +717,13 @@ async def websocket_mesh_endpoint(websocket: WebSocket):
             user_agent=init_data.get("user_agent", ""),
             battery=init_data.get("battery"),
             is_charging=init_data.get("is_charging"),
+            token=token,
+            pairing_code=pair_code,
             skip_accept=True,
         )
+        if not device:
+            return
+
         while True:
             msg_text = await websocket.receive_text()
             data = json.loads(msg_text)
@@ -2300,6 +2309,20 @@ def dashboard():
                     </div>
                 </div>
             </div>
+
+            <!-- COMPANION LOGS & PAIRED DEVICES AUDIT -->
+            <div style="margin-top: 18px; background: var(--bg-card); padding: 16px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="font-size: 12px; font-weight: 700; color: #ffffff;">📜 Companion Ecosystem Audit Logs & Security</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="refreshMeshLogs()">🔄 Refresh Logs</button>
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="generateNewPairingCode()">🔑 New Pairing Code</button>
+                    </div>
+                </div>
+                <div id="mesh-logs-container" style="background: var(--bg-input); font-family: monospace; font-size: 11px; padding: 10px; border-radius: 6px; height: 140px; overflow-y: auto; color: var(--text-muted); line-height: 1.5; border: 1px solid var(--border-subtle);">
+                    Loading companion logs...
+                </div>
+            </div>
         </div>
     </div>
 
@@ -3255,6 +3278,16 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                     const urlEl = document.getElementById('mesh-companion-url');
                     if (urlEl) urlEl.value = data.companion_url;
                 }
+
+                function escapeHtml(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                }
                 
                 const countBadge = document.getElementById('mesh-device-count');
                 if (countBadge) {
@@ -3264,13 +3297,18 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 const grid = document.getElementById('mesh-devices-grid');
                 if (grid && data.devices) {
                     grid.innerHTML = data.devices.map(d => {
-                        const icon = d.device_type === 'phone' ? '📱' :
-                                     d.device_type === 'watch' ? '⌚' :
-                                     d.device_type === 'laptop' ? '💻' : '🖥️';
+                        const dtype = (d.device_type || '').toLowerCase();
+                        const icon = (dtype === 'phone' || dtype === 'smartphone') ? '📱' :
+                                     (dtype === 'watch' || dtype === 'smartwatch') ? '⌚' :
+                                     (dtype === 'laptop' || dtype === 'workstation') ? '💻' : '🖥️';
                         const batt = d.battery_level !== null && d.battery_level !== undefined ?
                                      `${d.is_charging ? '⚡ ' : '🔋 '}${d.battery_level}%` : '⚡ Line Powered';
                         const statusColor = d.connected ? 'var(--accent-green)' : 'var(--text-muted)';
                         const statusText = d.connected ? 'ONLINE' : 'OFFLINE';
+                        const safeName = escapeHtml(d.name);
+                        const safeIp = escapeHtml(d.ip_address || 'Local Host');
+                        const safeType = escapeHtml(dtype.toUpperCase());
+                        const safeDevId = escapeHtml(d.device_id);
 
                         return `
                         <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px;">
@@ -3278,8 +3316,8 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                                 <div style="display: flex; align-items: center; gap: 8px;">
                                     <span style="font-size: 20px;">${icon}</span>
                                     <div>
-                                        <div style="font-weight: 700; color: #ffffff; font-size: 13px;">${d.name}</div>
-                                        <div style="font-size: 10px; color: var(--text-muted);">${d.ip_address || 'Local Host'} • ${d.device_type.toUpperCase()}</div>
+                                        <div style="font-weight: 700; color: #ffffff; font-size: 13px;">${safeName}</div>
+                                        <div style="font-size: 10px; color: var(--text-muted);">${safeIp} • ${safeType}</div>
                                     </div>
                                 </div>
                                 <span style="font-size: 10px; font-weight: 700; color: ${statusColor}; background: rgba(16,185,129,0.1); padding: 3px 8px; border-radius: 10px;">
@@ -3292,14 +3330,67 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                             </div>
                             ${d.device_id !== 'desktop-host' ? `
                             <div style="display: flex; gap: 6px; margin-top: 4px;">
-                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="buzzMeshDevice('${d.device_id}')">🔔 Buzz</button>
-                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="pushMeshClipboardTo('${d.device_id}')">📋 Push Clip</button>
+                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="buzzMeshDevice('${safeDevId}')">🔔 Buzz</button>
+                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px;" onclick="pushMeshClipboardTo('${safeDevId}')">📋 Push Clip</button>
+                                <button class="btn-action" style="flex: 1; padding: 4px 8px; font-size: 10px; background: rgba(239,68,68,0.2); border-color: #ef4444; color: #fca5a5;" onclick="revokeMeshDevice('${safeDevId}')">🚫 Revoke</button>
                             </div>` : ''}
                         </div>`;
                     }).join('');
                 }
+                refreshMeshLogs();
             } catch (e) {
                 console.error("Failed to refresh mesh devices", e);
+            }
+        }
+
+        async function refreshMeshLogs() {
+            try {
+                const res = await fetch('/api/mesh/logs?limit=25');
+                const data = await res.json();
+                const container = document.getElementById('mesh-logs-container');
+                if (container && data.logs) {
+                    if (data.logs.length === 0) {
+                        container.innerHTML = '<span style="color: var(--text-muted);">No log events yet. Ready for companion actions.</span>';
+                    } else {
+                        container.innerHTML = data.logs.slice(-25).map(l => {
+                            const lvlColor = l.level === 'ERROR' || l.level === 'CRITICAL' ? '#ef4444' :
+                                             l.level === 'WARNING' ? '#f59e0b' : '#10b981';
+                            return `<div><span style="color: var(--text-muted);">[${l.timestamp}]</span> <span style="color: ${lvlColor}; font-weight: 600;">[${l.level}]</span> <span style="color: #ffffff;">${escapeHtml(l.message)}</span></div>`;
+                        }).join('');
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }
+            } catch (err) {
+                console.error("Log fetch error", err);
+            }
+        }
+
+        async function generateNewPairingCode() {
+            try {
+                const res = await fetch('/api/mesh/pairing_code', { method: 'POST' });
+                const data = await res.json();
+                if (data.pairing_code) {
+                    showToast("New pairing code generated (active for 10 min): " + data.pairing_code);
+                    refreshMeshDevices();
+                }
+            } catch (err) {
+                alert("Pairing code error: " + err);
+            }
+        }
+
+        async function revokeMeshDevice(devId) {
+            if (confirm("Revoke authorization for device " + devId + "?")) {
+                try {
+                    await fetch('/api/mesh/revoke_device', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_id: devId })
+                    });
+                    showToast("Device revoked: " + devId);
+                    refreshMeshDevices();
+                } catch (e) {
+                    alert("Revoke error: " + e);
+                }
             }
         }
 

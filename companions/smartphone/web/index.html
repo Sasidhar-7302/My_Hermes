@@ -23,8 +23,13 @@
                     <div style="font-size: 11px; color: var(--text-muted);">Omni-Mesh Mobile Node</div>
                 </div>
             </div>
-            <div id="battery-tag" style="font-size: 11px; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
-                🔋 --%
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button id="pwa-install-btn" class="action-btn" style="display: none; padding: 4px 8px; font-size: 11px; width: auto; height: auto;" onclick="promptInstallApp()">
+                    ⬇️ Install App
+                </button>
+                <div id="battery-tag" style="font-size: 11px; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
+                    🔋 --%
+                </div>
             </div>
         </div>
 

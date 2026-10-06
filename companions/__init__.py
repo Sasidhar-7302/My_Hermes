@@ -127,6 +127,34 @@ def register_companion_routes(app: FastAPI):
     async def get_companion_sw():
         return Response(content=get_smartphone_sw(), media_type="application/javascript")
 
+    # ── COMPANION LOGS & AUTH ADMIN APIS ────────────────────────────────────
+    @app.get("/api/mesh/logs")
+    async def get_mesh_logs(limit: int = 50, level: Optional[str] = None):
+        from .logger import get_recent_companion_logs
+        return JSONResponse(content={"logs": get_recent_companion_logs(limit=limit, min_level=level)})
+
+    @app.get("/api/mesh/paired_devices")
+    async def get_mesh_paired_devices():
+        from .auth import get_pairing_manager
+        return JSONResponse(content={"devices": get_pairing_manager().list_paired_devices()})
+
+    @app.post("/api/mesh/revoke_device")
+    async def revoke_mesh_device(request: Request):
+        from .auth import get_pairing_manager
+        data = await request.json()
+        dev_id = str(data.get("device_id", ""))
+        ok = get_pairing_manager().revoke_device(dev_id)
+        if ok and dev_id in hub.active_sockets:
+            await hub.unregister_connection(dev_id)
+        return JSONResponse(content={"status": "revoked" if ok else "not_found", "device_id": dev_id})
+
+    @app.post("/api/mesh/pairing_code")
+    async def generate_pairing_code_route():
+        from .auth import get_pairing_manager
+        code = get_pairing_manager().create_pairing_code(ttl_seconds=600)
+        return JSONResponse(content={"pairing_code": code, "expires_in": 600})
+
+
 
 __all__ = [
     "OmniMeshHub",

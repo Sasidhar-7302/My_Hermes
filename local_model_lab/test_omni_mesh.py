@@ -246,29 +246,53 @@ def run_tests():
     passed += 1
 
     # -------------------------------------------------------------------------
-    # TEST 6: Real-time WebSocket Protocol & Multi-Device Simulation
+    # TEST 6: Real-time WebSocket Protocol & Token Authentication Lifecycle
     # -------------------------------------------------------------------------
     total += 1
-    print("\n[TEST 6] Testing WebSocket Mesh Handshake & Device Simulation...")
+    print("\n[TEST 6] Testing WebSocket Mesh Handshake & Token Authentication Lifecycle...")
+    from companions.auth import get_pairing_manager
+    pm = get_pairing_manager()
+
+    # Step A: Attempt connection without token or pairing code -> Must be rejected
+    unpaired_dev_id = f"unauth-device-{int(time.time())}"
+    with client.websocket_connect("/api/mesh/ws") as ws_unauth:
+        ws_unauth.send_text(json.dumps({
+            "type": "register",
+            "device_id": unpaired_dev_id,
+            "name": "Rogue Companion",
+            "device_type": "phone",
+        }))
+        reject_raw = ws_unauth.receive_text()
+        reject_pkt = json.loads(reject_raw)
+        assert reject_pkt.get("type") == "auth_error"
+        assert reject_pkt.get("status") == "unauthorized"
+        print("  ✓ Unauthenticated connection rejected with auth_error packet.")
+
+    # Step B: Generate pairing code and pair device
+    pairing_code = pm.create_pairing_code(ttl_seconds=300)
+    dev_id = f"watch-galaxy-test-{int(time.time())}"
+    issued_token = None
     with client.websocket_connect("/api/mesh/ws") as ws:
-        # Handshake registration for a simulated Smartwatch
         reg_pkt = {
             "type": "register",
-            "device_id": "watch-galaxy-test",
+            "device_id": dev_id,
             "name": "Galaxy Watch 6 Classic",
             "device_type": "watch",
+            "pair": pairing_code,
             "battery": 88,
             "is_charging": False,
             "user_agent": "WearOS/4.0",
         }
         ws.send_text(json.dumps(reg_pkt))
 
-        # Receive welcome packet
+        # Receive welcome packet with newly issued token
         resp = ws.receive_text()
         welcome = json.loads(resp)
         assert welcome.get("type") == "welcome"
-        assert welcome.get("device_id") == "watch-galaxy-test"
-        print("  ✓ WebSocket accepted handshake & sent welcome packet.")
+        assert welcome.get("device_id") == dev_id
+        issued_token = welcome.get("auth_token")
+        assert issued_token is not None and issued_token.startswith("tok_")
+        print(f"  ✓ Pairing code accepted; device issued token: {issued_token[:10]}...")
 
         # Send telemetry heartbeat
         ws.send_text(json.dumps({
@@ -279,12 +303,12 @@ def run_tests():
         time.sleep(0.1)
 
         # Verify device state in Hub
-        dev = hub.devices.get("watch-galaxy-test")
+        dev = hub.devices.get(dev_id)
         assert dev is not None
         assert dev.device_type in ("smartwatch", "watch")
         assert dev.battery_level == 87
         assert dev.is_charging is True
-        print(f"  ✓ Device telemetry registered: {dev.name} ({dev.device_type}) at {dev.battery_level}% (Charging).")
+        print(f"  ✓ Device telemetry registered: {dev.name} at {dev.battery_level}% (Charging).")
 
         # Send clipboard push from watch to PC
         ws.send_text(json.dumps({
@@ -294,6 +318,36 @@ def run_tests():
         time.sleep(0.1)
         assert hub.last_synced_clipboard == "Secret note copied on smartwatch"
         print("  ✓ Smartwatch -> PC clipboard push verified.")
+
+    # Step C: Reconnect using the issued device token (without pairing code)
+    with client.websocket_connect("/api/mesh/ws") as ws_reconnect:
+        ws_reconnect.send_text(json.dumps({
+            "type": "register",
+            "device_id": dev_id,
+            "name": "Galaxy Watch 6 Classic",
+            "device_type": "watch",
+            "token": issued_token,
+        }))
+        resp = ws_reconnect.receive_text()
+        welcome = json.loads(resp)
+        assert welcome.get("type") == "welcome"
+        assert welcome.get("device_id") == dev_id
+        print("  ✓ Subsequent connection authenticated via persistent token.")
+
+    # Step D: Revoke device -> verify reconnection is rejected
+    assert pm.revoke_device(dev_id) is True
+    with client.websocket_connect("/api/mesh/ws") as ws_revoked:
+        ws_revoked.send_text(json.dumps({
+            "type": "register",
+            "device_id": dev_id,
+            "name": "Galaxy Watch 6 Classic",
+            "device_type": "watch",
+            "token": issued_token,
+        }))
+        reject_raw = ws_revoked.receive_text()
+        reject_pkt = json.loads(reject_raw)
+        assert reject_pkt.get("type") == "auth_error"
+        print("  ✓ Revoked device token properly rejected with auth_error.")
 
     passed += 1
 

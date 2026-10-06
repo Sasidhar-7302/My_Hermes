@@ -23,17 +23,22 @@ class SmartphoneBridge:
         self.photo_dir = photo_dir or (Path(__file__).resolve().parent.parent.parent / "local_model_lab" / "outputs" / "mesh_photos")
         self.photo_dir.mkdir(parents=True, exist_ok=True)
         self.clipboard_history: List[Dict[str, Any]] = []
+        self.activity_log: List[Dict[str, Any]] = []
+
+    def save_captured_photo(self, img_bytes: bytes, filename: str) -> Path:
+        """Saves raw image bytes directly to outputs directory."""
+        filepath = self.photo_dir / filename
+        filepath.write_bytes(img_bytes)
+        logger.info(f"📸 Saved smartphone photo {filename} ({len(img_bytes)} bytes)")
+        return filepath
 
     def save_camera_photo(self, photo_b64: str, device_id: str) -> Dict[str, Any]:
         """Decodes and stores a high-resolution photo from the mobile camera."""
         filename = f"phone_{device_id[:6]}_{int(time.time())}.jpg"
-        filepath = self.photo_dir / filename
-
         raw_b64 = photo_b64.split(",")[-1]
         img_bytes = base64.b64decode(raw_b64)
-        filepath.write_bytes(img_bytes)
+        filepath = self.save_captured_photo(img_bytes, filename)
 
-        logger.info(f"📸 Saved smartphone photo from {device_id}: {filename} ({len(img_bytes)} bytes)")
         return {
             "filename": filename,
             "filepath": str(filepath),
@@ -54,6 +59,20 @@ class SmartphoneBridge:
         self.clipboard_history.insert(0, entry)
         if len(self.clipboard_history) > 20:
             self.clipboard_history = self.clipboard_history[:20]
+
+    def buffer_clipboard(self, content: str, source: str = "mesh"):
+        """Alias for record_clipboard."""
+        return self.record_clipboard(content=content, source=source)
+
+    def log_activity(self, action: str, detail: str):
+        """Records smartphone bridge interaction."""
+        self.activity_log.append({
+            "action": action,
+            "detail": detail,
+            "timestamp": time.time(),
+        })
+        if len(self.activity_log) > 50:
+            self.activity_log = self.activity_log[-50:]
 
     def get_clipboard_history(self) -> List[Dict[str, Any]]:
         return list(self.clipboard_history)

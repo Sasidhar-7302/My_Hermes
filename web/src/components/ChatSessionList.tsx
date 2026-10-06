@@ -55,6 +55,15 @@ function rowLabel(session: SessionInfo, untitled: string): string {
   return untitled;
 }
 
+function getSourceBadge(source?: string): string | null {
+  if (!source || source === "cli") return null;
+  const s = source.toLowerCase();
+  if (s.includes("watch")) return "⌚";
+  if (s.includes("laptop") || s.includes("workstation")) return "💻";
+  if (s.includes("phone") || s === "companion") return "📱";
+  return null;
+}
+
 export function ChatSessionList({
   activeSessionId,
   profile,
@@ -194,8 +203,13 @@ export function ChatSessionList({
                   : "text-text-secondary hover:bg-midground/5 hover:text-foreground",
               )}
             >
-              <span className="w-full truncate text-sm font-medium">
-                {rowLabel(s, t.sessions.untitledSession)}
+              <span className="w-full truncate text-sm font-medium flex items-center gap-1.5">
+                {getSourceBadge(s.source) && (
+                  <span className="shrink-0 text-xs" title={`From ${s.source}`}>
+                    {getSourceBadge(s.source)}
+                  </span>
+                )}
+                <span className="truncate">{rowLabel(s, t.sessions.untitledSession)}</span>
               </span>
               <span className="flex w-full items-center gap-1.5 text-[0.6875rem] text-text-tertiary">
                 <span>{timeAgo(s.last_active)}</span>
@@ -208,7 +222,10 @@ export function ChatSessionList({
                 {s.source && s.source !== "cli" && (
                   <>
                     <span aria-hidden>·</span>
-                    <span className="truncate">{s.source}</span>
+                    <span className="truncate flex items-center gap-0.5">
+                      {getSourceBadge(s.source) && <span>{getSourceBadge(s.source)}</span>}
+                      <span>{s.source}</span>
+                    </span>
                   </>
                 )}
               </span>

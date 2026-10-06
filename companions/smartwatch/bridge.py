@@ -70,8 +70,22 @@ class SmartwatchBridge:
         }
 
     def get_haptic_pattern(self, event_type: str) -> List[int]:
-        """Resolves physical wrist vibration sequence for a given event."""
-        return HAPTIC_PATTERNS.get(event_type.upper(), [80])
+        """Resolves physical wrist vibration sequence for a given event or alias."""
+        norm = (event_type or "").strip().upper().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "PANIC": "PANIC_STOP",
+            "EMERGENCY": "PANIC_STOP",
+            "STOP": "PANIC_STOP",
+            "COMPLETE": "TASK_COMPLETE",
+            "DONE": "TASK_COMPLETE",
+            "CLIPBOARD": "CLIPBOARD_SYNC",
+            "CLIP": "CLIPBOARD_SYNC",
+            "BATTERY": "LOW_BATTERY",
+            "VOICE": "VOICE_LISTENING",
+            "LISTEN": "VOICE_LISTENING",
+        }
+        resolved = aliases.get(norm, norm)
+        return HAPTIC_PATTERNS.get(resolved, [80])
 
 
 _watch_bridge_instance: Optional[SmartwatchBridge] = None

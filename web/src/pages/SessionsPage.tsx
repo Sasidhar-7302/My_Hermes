@@ -29,6 +29,9 @@ import {
   Pencil,
   Check,
   Archive,
+  Smartphone,
+  Watch,
+  Laptop,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { shouldRefreshSessions } from "@/lib/session-refresh";
@@ -80,6 +83,10 @@ const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
     slack: { icon: MessageSquare, color: "text-[oklch(0.7_0.15_155)]" },
     whatsapp: { icon: Globe, color: "text-success" },
     cron: { icon: Clock, color: "text-warning" },
+    companion: { icon: Smartphone, color: "text-emerald-400" },
+    smartwatch: { icon: Watch, color: "text-emerald-400" },
+    smartphone: { icon: Smartphone, color: "text-emerald-400" },
+    laptop: { icon: Laptop, color: "text-emerald-400" },
   };
 
 /** Render an FTS5 snippet with highlighted matches.

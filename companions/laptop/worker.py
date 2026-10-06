@@ -5,9 +5,10 @@ Run this standalone script on any secondary laptop (Windows / macOS / Linux) to 
 it to your primary Hermes Desktop PC.
 
 Capabilities:
-1. Bidirectional OS Clipboard Sync (Windows, macOS pbcopy, Linux xclip)
+1. Bidirectional OS Clipboard Sync with Stale-Overwrite Protection
 2. Hardware Resource Telemetry (CPU %, RAM %, Battery %)
-3. Remote Task Execution dispatched from Hermes Core
+3. Token-based Authentication
+4. Remote Task Execution dispatched from Hermes Core
 """
 
 import argparse
@@ -70,13 +71,30 @@ def set_os_clipboard(text: str) -> bool:
         return False
 
 
-async def run_worker(hub_host: str, hub_port: int):
+def get_system_telemetry() -> dict:
+    """Collects CPU, RAM, and Battery statistics if psutil is available."""
+    data = {"cpu": 0.0, "ram": 0.0, "battery": None, "is_charging": None}
+    try:
+        import psutil
+        data["cpu"] = psutil.cpu_percent(interval=None)
+        data["ram"] = psutil.virtual_memory().percent
+        batt = psutil.sensors_battery()
+        if batt:
+            data["battery"] = int(batt.percent)
+            data["is_charging"] = batt.power_plugged
+    except Exception:
+        pass
+    return data
+
+
+async def run_worker(hub_host: str, hub_port: int, token: str = "", pairing_code: str = ""):
     """Main worker event loop connecting to primary Hermes Desktop PC."""
     import websockets
 
     uri = f"ws://{hub_host}:{hub_port}/api/mesh/ws"
     node_id = f"laptop-{socket.gethostname().lower()}"
-    last_clip = ""
+    last_clip = get_os_clipboard()  # Seed with current clipboard to prevent initial stale overwrite
+    initial_sync_done = False
 
     while True:
         try:
@@ -84,46 +102,103 @@ async def run_worker(hub_host: str, hub_port: int):
             async with websockets.connect(uri) as ws:
                 logger.info("Connected to Hermes Omni-Mesh Hub!")
 
-                # Register laptop
+                # Register laptop with auth token
                 reg_pkt = {
                     "type": "register",
                     "device_id": node_id,
                     "name": f"Laptop ({socket.gethostname()})",
                     "device_type": "laptop",
-                    "user_agent": f"HermesLaptopWorker/1.0 ({platform.system()} {platform.release()})",
+                    "user_agent": f"HermesLaptopWorker/2.0 ({platform.system()} {platform.release()})",
+                    "token": token,
+                    "pairing_code": pairing_code,
                 }
                 await ws.send(json.dumps(reg_pkt))
 
-                # Periodic heartbeat & clipboard watcher
-                async def clipboard_loop():
-                    nonlocal last_clip
+                # Periodic heartbeat & telemetry watcher
+                async def telemetry_loop():
                     while True:
-                        current = get_os_clipboard()
-                        if current and current != last_clip:
-                            last_clip = current
-                            logger.info(f"📋 Pushing laptop clipboard to PC ({len(current)} chars)...")
-                            await ws.send(json.dumps({
-                                "type": "clipboard_push",
-                                "content": current,
-                            }))
+                        stats = get_system_telemetry()
+                        await ws.send(json.dumps({
+                            "type": "telemetry",
+                            "cpu": stats["cpu"],
+                            "ram": stats["ram"],
+                            "battery": stats["battery"],
+                            "is_charging": stats["is_charging"],
+                        }))
+                        await asyncio.sleep(5.0)
+
+                # Periodic clipboard watcher
+                async def clipboard_loop():
+                    nonlocal last_clip, initial_sync_done
+                    while True:
+                        if initial_sync_done:
+                            current = get_os_clipboard()
+                            if current and current != last_clip:
+                                last_clip = current
+                                logger.info(f"📋 Pushing laptop clipboard to PC ({len(current)} chars)...")
+                                await ws.send(json.dumps({
+                                    "type": "clipboard_push",
+                                    "content": current,
+                                }))
                         await asyncio.sleep(1.0)
 
                 async def incoming_loop():
-                    nonlocal last_clip
+                    nonlocal last_clip, initial_sync_done
                     async for message in ws:
                         data = json.loads(message)
-                        if data.get("type") == "clipboard_update":
+                        msg_type = data.get("type")
+
+                        if msg_type == "welcome":
+                            logger.info(f"Verified connection. Host IP: {data.get('host_ip')}")
+                            if data.get("auth_token"):
+                                logger.info(f"Received new device token: {data.get('auth_token')}")
+                            # Initialize clipboard from PC
+                            pc_clip = data.get("pc_clipboard", "")
+                            if pc_clip:
+                                last_clip = pc_clip
+                                set_os_clipboard(pc_clip)
+                                logger.info(f"📋 Seeded clipboard from PC ({len(pc_clip)} chars)")
+                            initial_sync_done = True
+
+                        elif msg_type == "auth_error":
+                            logger.error(f"Authentication failed: {data.get('message')}")
+                            await asyncio.sleep(10.0)
+                            return
+
+                        elif msg_type == "clipboard_update":
                             content = data.get("content", "")
                             if content and content != last_clip:
                                 last_clip = content
                                 set_os_clipboard(content)
                                 logger.info(f"📋 Received & updated clipboard from PC ({len(content)} chars)")
-                        elif data.get("type") == "notification":
-                            logger.info(f"🔔 Notification from PC: {data.get('title')} - {data.get('body')}")
-                        elif data.get("type") == "panic_alert":
+
+                        elif msg_type == "notification":
+                            logger.info(f"🔔 Notification: {data.get('title')} - {data.get('body')}")
+
+                        elif msg_type == "panic_alert":
                             logger.warning(f"🚨 PANIC ALERT: {data.get('message')}")
 
-                await asyncio.gather(clipboard_loop(), incoming_loop())
+                        elif msg_type == "remote_task":
+                            # Execute dispatched command
+                            cmd = data.get("command", "")
+                            task_id = data.get("task_id", "")
+                            logger.info(f"⚡ Executing remote task [{task_id}]: {cmd}")
+                            try:
+                                proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                                out = proc.stdout or proc.stderr
+                                code = proc.returncode
+                            except Exception as exc:
+                                out = str(exc)
+                                code = 1
+
+                            await ws.send(json.dumps({
+                                "type": "task_result",
+                                "task_id": task_id,
+                                "returncode": code,
+                                "output": out,
+                            }))
+
+                await asyncio.gather(telemetry_loop(), clipboard_loop(), incoming_loop())
         except Exception as exc:
             logger.warning(f"Connection lost ({exc}). Retrying in 5 seconds...")
             await asyncio.sleep(5.0)
@@ -133,9 +208,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hermes Laptop Worker Node")
     parser.add_argument("--host", default="127.0.0.1", help="Hermes PC LAN IP address")
     parser.add_argument("--port", type=int, default=8000, help="Hermes PC port (default: 8000)")
+    parser.add_argument("--token", default="", help="Device authorization token")
+    parser.add_argument("--pair", default="", help="One-time pairing code from PC QR code")
     args = parser.parse_args()
 
     try:
-        asyncio.run(run_worker(args.host, args.port))
+        asyncio.run(run_worker(args.host, args.port, token=args.token, pairing_code=args.pair))
     except KeyboardInterrupt:
         logger.info("Laptop worker stopped.")

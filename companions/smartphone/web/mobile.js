@@ -6,8 +6,42 @@ let ws = null;
 let deviceId = localStorage.getItem('hermes_phone_id') || ('phone-' + Math.random().toString(36).substring(2, 9));
 localStorage.setItem('hermes_phone_id', deviceId);
 
+// Pairing & Authentication token management
+const urlParams = new URLSearchParams(window.location.search);
+const pairParam = urlParams.get('pair') || urlParams.get('pairing_code');
+const tokenParam = urlParams.get('token');
+if (tokenParam) {
+    localStorage.setItem('hermes_phone_token', tokenParam);
+}
+let authToken = localStorage.getItem('hermes_phone_token') || tokenParam || '';
+
 let isRecording = false;
 let recognition = null;
+let deferredInstallPrompt = null;
+
+// PWA Install prompt listener
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const installBtn = document.getElementById('pwa-install-btn');
+    if (installBtn) {
+        installBtn.style.display = 'inline-flex';
+    }
+});
+
+function promptInstallApp() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+                showToast('Hermes Phone app installed!');
+            }
+            deferredInstallPrompt = null;
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) installBtn.style.display = 'none';
+        });
+    }
+}
 
 function showToast(msg) {
     const t = document.getElementById('toast-banner');
@@ -42,22 +76,36 @@ if ('getBattery' in navigator) {
 
 // WebSocket Connection
 function connectPhone() {
-    ws = new WebSocket(WS_URL);
+    let wsUrl = WS_URL;
+    const q = [];
+    if (authToken) q.push(`token=${encodeURIComponent(authToken)}`);
+    if (pairParam) q.push(`pair=${encodeURIComponent(pairParam)}`);
+    if (q.length > 0) wsUrl += `?${q.join('&')}`;
+
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
         document.getElementById('connection-orb').style.background = '#10b981';
         showToast('Connected to Hermes Mesh');
-        ws.send(JSON.stringify({
+        const regPayload = {
             type: 'register',
             device_id: deviceId,
             name: 'Smartphone Companion',
             device_type: 'smartphone',
             user_agent: navigator.userAgent
-        }));
+        };
+        if (authToken) regPayload.token = authToken;
+        if (pairParam) regPayload.pair = pairParam;
+        ws.send(JSON.stringify(regPayload));
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         document.getElementById('connection-orb').style.background = '#ef4444';
+        if (event && event.code === 4001) {
+            showToast('⚠️ Unauthorized. Please pair from PC dashboard.');
+            setTimeout(connectPhone, 8000);
+            return;
+        }
         setTimeout(connectPhone, 3000);
     };
 
@@ -73,9 +121,20 @@ function connectPhone() {
 
 function handleMeshEvent(data) {
     if (data.type === 'welcome') {
+        if (data.auth_token) {
+            authToken = data.auth_token;
+            localStorage.setItem('hermes_phone_token', authToken);
+            if (pairParam && window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
         if (data.pc_clipboard) {
             document.getElementById('clip-text').value = data.pc_clipboard;
         }
+    } else if (data.type === 'auth_error') {
+        showToast('❌ ' + (data.message || 'Authentication error'));
+        localStorage.removeItem('hermes_phone_token');
+        authToken = '';
     } else if (data.type === 'clipboard_update') {
         document.getElementById('clip-text').value = data.content || '';
         showToast('📋 Clipboard updated from PC');
