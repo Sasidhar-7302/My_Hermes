@@ -1,420 +1,290 @@
-"""Hermes Autonomous Health & API Key Watchdog.
+"""Hermes health & API key watchdog.
 
-Audits Hermes runtime health, checks active and missing API keys, verifies
-service connectivity (Ollama, Gateway, OmniMesh Hub, Provider APIs), and sends
-structured alert notifications directly to Telegram.
+Checks local services (Ollama, gateway, OmniMesh dashboard), host resources
+(free disk, available commit memory), and which API keys are configured in the
+local ``.env``. Key *presence* is checked, not key validity — use
+``hermes doctor`` for live provider probes.
+
+Modes:
+  * Interactive (TTY): prints a full summary. ``--notify-telegram`` also sends
+    the report via ``hermes send``.
+  * Cron (non-TTY or ``--cron``): prints the report to stdout only when the
+    health state *changed* since the last run (new problem, or recovery).
+    Hermes cron delivers non-empty stdout to Telegram, so an unchanged state
+    stays silent instead of re-sending the same alert every run.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import httpx
 
-APP_DIR = Path(__file__).resolve().parent.parent
-HERMES_HOME = APP_DIR.parent
+# app/scripts/hermes_watchdog.py -> parents[2] is the Hermes home directory.
+HERMES_HOME = Path(os.environ.get("HERMES_HOME") or Path(__file__).resolve().parents[2])
+APP_DIR = HERMES_HOME / "app"
 ENV_PATH = HERMES_HOME / ".env"
-CONFIG_PATH = HERMES_HOME / "config.yaml"
+STATE_PATH = HERMES_HOME / "logs" / "watchdog_state.json"
+
+MIN_FREE_DISK_GB = 5.0
+MIN_FREE_COMMIT_GB = 4.0
+
+KEY_DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    "OPENROUTER_API_KEY": {"name": "OpenRouter", "purpose": "Cloud fallback models"},
+    "OLLAMA_API_KEY": {"name": "Ollama Cloud", "purpose": "Ollama cloud models"},
+    "NVIDIA_API_KEY": {"name": "NVIDIA NIM", "purpose": "NIM model inference"},
+    "GROQ_API_KEY": {"name": "Groq", "purpose": "Fast inference", "revoked": True},
+    "GOOGLE_API_KEY": {"name": "Google Gemini", "purpose": "Gemini models", "revoked": True},
+    "XAI_API_KEY": {"name": "xAI Grok", "purpose": "x_search tool"},
+    "EXA_API_KEY": {"name": "Exa", "purpose": "Neural web search"},
+    "TAVILY_API_KEY": {"name": "Tavily", "purpose": "Web search"},
+    "FIRECRAWL_API_KEY": {"name": "Firecrawl", "purpose": "Web extraction"},
+    "FAL_KEY": {"name": "Fal.ai", "purpose": "Image/video generation"},
+    "TELEGRAM_BOT_TOKEN": {"name": "Telegram", "purpose": "Primary gateway", "required": True},
+    "DISCORD_BOT_TOKEN": {"name": "Discord", "purpose": "Discord adapter"},
+    "SLACK_BOT_TOKEN": {"name": "Slack", "purpose": "Slack adapter"},
+    "TERRA_API_KEY": {"name": "Terra", "purpose": "Wearable biometrics"},
+    "SPOTIFY_CLIENT_ID": {"name": "Spotify", "purpose": "Playback control"},
+}
 
 
-def load_env_variables() -> Dict[str, Dict[str, Any]]:
-    """Parse .env file to discover active, commented-out, and empty keys."""
-    results: Dict[str, Dict[str, Any]] = {}
+# ── Collection ────────────────────────────────────────────────────────────
+
+
+def read_env_key_status() -> Dict[str, str]:
+    """Return ``{VAR: configured|commented|empty}`` without exposing values."""
+    statuses: Dict[str, str] = {}
     if not ENV_PATH.exists():
-        return results
+        return statuses
 
-    try:
-        content = ENV_PATH.read_text(encoding="utf-8", errors="replace")
-    except Exception as exc:
-        print(f"Error reading .env: {exc}", file=sys.stderr)
-        return results
-
-    for line in content.splitlines():
-        line_strip = line.strip()
-        if not line_strip:
+    for raw_line in ENV_PATH.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        is_commented = line.startswith("#")
+        body = line.lstrip("#").strip()
+        if "=" not in body:
             continue
-
-        is_commented = line_strip.startswith("#")
-        cleaned_line = line_strip.lstrip("#").strip()
-        if "=" not in cleaned_line:
-            continue
-
-        key, val = cleaned_line.split("=", 1)
+        key, value = body.split("=", 1)
         key = key.strip()
-        val = val.strip().strip("'\"")
-
-        # Determine status
+        value = value.strip().strip("'\"")
         if is_commented:
-            status = "disabled_or_revoked"
-        elif not val:
-            status = "empty"
-        else:
+            status = "commented"
+        elif value:
             status = "configured"
-
-        # Keep the most relevant status if key repeats
-        if key not in results or (results[key]["status"] != "configured" and status == "configured"):
-            results[key] = {
-                "status": status,
-                "has_value": bool(val),
-                "length": len(val) if val else 0,
-            }
-
-    return results
-
-
-def check_api_keys() -> Dict[str, Any]:
-    """Audit core, fallback, search, and platform API keys."""
-    env_vars = load_env_variables()
-
-    # Track specific API key categories
-    key_definitions = {
-        # Core & LLM Providers
-        "OPENROUTER_API_KEY": {
-            "name": "OpenRouter API",
-            "tier": "Core / Fallback",
-            "description": "Multi-model cloud fallback (DeepSeek, GLM, Kimi, Nemotron)",
-            "required": False,
-        },
-        "OLLAMA_API_KEY": {
-            "name": "Ollama Cloud API",
-            "tier": "Core / Cloud",
-            "description": "Ollama cloud models and remote endpoints",
-            "required": False,
-        },
-        "NVIDIA_API_KEY": {
-            "name": "NVIDIA NIM",
-            "tier": "Fallback",
-            "description": "NVIDIA high-performance NIM model inference",
-            "required": False,
-        },
-        "GROQ_API_KEY": {
-            "name": "Groq Cloud API",
-            "tier": "High-Speed Inference",
-            "description": "Fast Llama/Qwen inference (currently compromised/revoked)",
-            "required": False,
-            "was_compromised": True,
-        },
-        "GOOGLE_API_KEY": {
-            "name": "Google / Gemini API",
-            "tier": "Vision / Extraction",
-            "description": "Gemini 2.5 Flash multimodal & extraction (compromised/revoked)",
-            "required": False,
-            "was_compromised": True,
-        },
-        "XAI_API_KEY": {
-            "name": "xAI API (Grok)",
-            "tier": "Intelligence / Search",
-            "description": "Enables x_search real-time X/Twitter intelligence tool",
-            "required": False,
-        },
-        # Search & Web Intelligence
-        "EXA_API_KEY": {
-            "name": "Exa Neural Search",
-            "tier": "Search Engine",
-            "description": "Deep neural semantic web search for research & briefing",
-            "required": False,
-        },
-        "TAVILY_API_KEY": {
-            "name": "Tavily Search API",
-            "tier": "Search Engine",
-            "description": "Real-time AI search agent engine",
-            "required": False,
-        },
-        "FIRECRAWL_API_KEY": {
-            "name": "Firecrawl Scraper API",
-            "tier": "Web Extraction",
-            "description": "Clean markdown web extraction & deep crawling",
-            "required": False,
-        },
-        # Creative & Generative
-        "FAL_KEY": {
-            "name": "Fal.ai Compute",
-            "tier": "Image / Media Gen",
-            "description": "FLUX and high-speed image/video generation",
-            "required": False,
-        },
-        # Integrations & Chat Platforms
-        "TELEGRAM_BOT_TOKEN": {
-            "name": "Telegram Bot Token",
-            "tier": "Primary Gateway",
-            "description": "Telegram 2-way companion & notifications",
-            "required": True,
-        },
-        "DISCORD_BOT_TOKEN": {
-            "name": "Discord Bot Token",
-            "tier": "Platform Adapter",
-            "description": "Discord bot channel & server integration",
-            "required": False,
-        },
-        "SLACK_BOT_TOKEN": {
-            "name": "Slack Bot Token",
-            "tier": "Platform Adapter",
-            "description": "Slack workspace bot and incident responses",
-            "required": False,
-        },
-        "TERRA_API_KEY": {
-            "name": "Terra API (Wearables)",
-            "tier": "Companion Health",
-            "description": "Smartwatch biometrics (Garmin, Apple Watch, Galaxy)",
-            "required": False,
-        },
-        "SPOTIFY_CLIENT_ID": {
-            "name": "Spotify API",
-            "tier": "Media Playback",
-            "description": "Spotify playback control tool",
-            "required": False,
-        },
-    }
-
-    configured_keys = []
-    missing_keys = []
-    compromised_keys = []
-
-    for env_name, meta in key_definitions.items():
-        state = env_vars.get(env_name, {})
-        status = state.get("status", "not_in_env")
-
-        entry = {
-            "var": env_name,
-            "name": meta["name"],
-            "tier": meta["tier"],
-            "description": meta["description"],
-            "status": status,
-        }
-
-        if meta.get("was_compromised"):
-            if status == "disabled_or_revoked" or status != "configured":
-                compromised_keys.append(entry)
-            else:
-                configured_keys.append(entry)
-        elif status == "configured":
-            configured_keys.append(entry)
         else:
-            missing_keys.append(entry)
-
-    return {
-        "configured": configured_keys,
-        "missing": missing_keys,
-        "compromised": compromised_keys,
-    }
+            status = "empty"
+        # A configured line wins over commented/empty duplicates.
+        if statuses.get(key) != "configured":
+            statuses[key] = status
+    return statuses
 
 
-def check_runtime_services() -> Dict[str, Any]:
-    """Check health of Ollama, Gateway, and OmniMesh hub."""
-    services = {}
+def audit_api_keys() -> Dict[str, List[Dict[str, str]]]:
+    statuses = read_env_key_status()
+    audit: Dict[str, List[Dict[str, str]]] = {"configured": [], "revoked": [], "missing": []}
+    for var, meta in KEY_DEFINITIONS.items():
+        entry = {"var": var, "name": meta["name"], "purpose": meta["purpose"]}
+        if statuses.get(var) == "configured":
+            audit["configured"].append(entry)
+        elif meta.get("revoked"):
+            audit["revoked"].append(entry)
+        else:
+            entry["required"] = "yes" if meta.get("required") else "no"
+            audit["missing"].append(entry)
+    return audit
 
-    # 1. Local Ollama
+
+def _check_http(label: str, url: str) -> Dict[str, Any]:
     try:
-        r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=3.0)
-        if r.status_code == 200:
-            models = [m.get("name") for m in r.json().get("models", [])]
-            services["ollama"] = {
-                "ok": True,
-                "label": "Local Ollama (11434)",
-                "detail": f"Active ({len(models)} models available: {', '.join(models[:3])})",
-            }
-        else:
-            services["ollama"] = {
-                "ok": False,
-                "label": "Local Ollama (11434)",
-                "detail": f"HTTP {r.status_code}",
-            }
-    except Exception as exc:
-        services["ollama"] = {
-            "ok": False,
-            "label": "Local Ollama (11434)",
-            "detail": f"Offline ({exc.__class__.__name__})",
-        }
+        response = httpx.get(url, timeout=3.0)
+        return {"ok": response.status_code == 200, "label": label, "detail": f"HTTP {response.status_code}"}
+    except httpx.HTTPError as exc:
+        return {"ok": False, "label": label, "detail": f"offline ({exc.__class__.__name__})"}
 
-    # 2. Company Dashboard / OmniMesh Hub
-    try:
-        r = httpx.get("http://127.0.0.1:8000/", timeout=3.0)
-        if r.status_code == 200:
-            services["omnimesh"] = {
-                "ok": True,
-                "label": "OmniMesh Hub / Dashboard (8000)",
-                "detail": "Online (200 OK)",
-            }
-        else:
-            services["omnimesh"] = {
-                "ok": False,
-                "label": "OmniMesh Hub / Dashboard (8000)",
-                "detail": f"HTTP {r.status_code}",
-            }
-    except Exception as exc:
-        services["omnimesh"] = {
-            "ok": False,
-            "label": "OmniMesh Hub / Dashboard (8000)",
-            "detail": f"Offline ({exc.__class__.__name__})",
-        }
 
-    # 3. Gateway Daemon Process
+def _check_gateway_process() -> Dict[str, Any]:
+    label = "Telegram gateway"
     try:
         import psutil
-        gateway_running = False
-        gateway_pid = None
-        for p in psutil.process_iter(["pid", "name", "cmdline"]):
-            cmdline = " ".join(p.info.get("cmdline") or [])
-            if "hermes" in cmdline.lower() and "gateway" in cmdline.lower() and "run" in cmdline.lower():
-                gateway_running = True
-                gateway_pid = p.info.get("pid")
-                break
-        services["gateway"] = {
-            "ok": gateway_running,
-            "label": "Telegram Gateway Daemon",
-            "detail": f"Running (PID: {gateway_pid})" if gateway_running else "Not Running",
+    except ImportError:
+        return {"ok": True, "label": label, "detail": "psutil unavailable, not checked"}
+
+    gateway_procs = {}
+    for proc in psutil.process_iter(["pid", "ppid", "cmdline"]):
+        cmdline = " ".join(proc.info.get("cmdline") or []).lower()
+        if "hermes" in cmdline and "gateway run" in cmdline and "powershell" not in cmdline:
+            gateway_procs[proc.info["pid"]] = proc.info["ppid"]
+    # On Windows a venv launcher spawns child interpreters with the same
+    # command line; only processes whose parent is not a gateway are real roots.
+    roots = sorted(pid for pid, ppid in gateway_procs.items() if ppid not in gateway_procs)
+    if not roots:
+        return {"ok": False, "label": label, "detail": "not running"}
+    if len(roots) > 1:
+        # Two pollers on one bot token make Telegram drop both connections.
+        return {"ok": False, "label": label, "detail": f"DUPLICATE instances (PIDs {', '.join(map(str, roots))})"}
+    return {"ok": True, "label": label, "detail": f"running (PID {roots[0]})"}
+
+
+def check_services() -> Dict[str, Dict[str, Any]]:
+    return {
+        "ollama": _check_http("Local Ollama", "http://127.0.0.1:11434/api/tags"),
+        "dashboard": _check_http("OmniMesh dashboard", "http://127.0.0.1:8000/"),
+        "gateway": _check_gateway_process(),
+    }
+
+
+def _free_commit_gb() -> float | None:
+    """Available commit charge (RAM + pagefile) in GB; ``None`` if unknown."""
+    if sys.platform != "win32":
+        try:
+            import psutil
+            return (psutil.virtual_memory().available + psutil.swap_memory().free) / 1e9
+        except ImportError:
+            return None
+
+    class MemoryStatusEx(ctypes.Structure):
+        _fields_ = [
+            ("dwLength", ctypes.c_ulong),
+            ("dwMemoryLoad", ctypes.c_ulong),
+            ("ullTotalPhys", ctypes.c_ulonglong),
+            ("ullAvailPhys", ctypes.c_ulonglong),
+            ("ullTotalPageFile", ctypes.c_ulonglong),
+            ("ullAvailPageFile", ctypes.c_ulonglong),
+            ("ullTotalVirtual", ctypes.c_ulonglong),
+            ("ullAvailVirtual", ctypes.c_ulonglong),
+            ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+        ]
+
+    status = MemoryStatusEx()
+    status.dwLength = ctypes.sizeof(MemoryStatusEx)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None
+    return status.ullAvailPageFile / 1e9
+
+
+def check_resources() -> Dict[str, Dict[str, Any]]:
+    free_disk_gb = shutil.disk_usage(HERMES_HOME).free / 1e9
+    resources = {
+        "disk": {
+            "ok": free_disk_gb >= MIN_FREE_DISK_GB,
+            "label": "Free disk",
+            "detail": f"{free_disk_gb:.1f} GB (minimum {MIN_FREE_DISK_GB:.0f} GB)",
         }
-    except Exception as exc:
-        services["gateway"] = {
-            "ok": True,  # Assume ok if psutil not present
-            "label": "Telegram Gateway Daemon",
-            "detail": f"Unable to inspect psutil: {exc}",
+    }
+    free_commit = _free_commit_gb()
+    if free_commit is not None:
+        resources["memory"] = {
+            "ok": free_commit >= MIN_FREE_COMMIT_GB,
+            "label": "Available memory (RAM + pagefile)",
+            "detail": f"{free_commit:.1f} GB (minimum {MIN_FREE_COMMIT_GB:.0f} GB)",
         }
+    return resources
 
-    return services
+
+# ── State tracking ────────────────────────────────────────────────────────
 
 
-def generate_telegram_alert(
-    api_audit: Dict[str, Any], services: Dict[str, Any]
-) -> str:
-    """Format a clean, readable Markdown alert for Telegram."""
-    lines = [
-        "🛡️ *Hermes Health & API Key Status Report*",
-        "━━━━━━━━━━━━━━━━━━━━━━",
+def health_fingerprint(checks: Dict[str, Dict[str, Any]], audit: Dict[str, List[Dict[str, str]]]) -> str:
+    """Hash of the coarse health state (which checks fail, which keys are absent)."""
+    state = {
+        "failing": sorted(name for name, check in checks.items() if not check["ok"]),
+        "revoked": sorted(k["var"] for k in audit["revoked"]),
+        "missing_required": sorted(k["var"] for k in audit["missing"] if k["required"] == "yes"),
+    }
+    return hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+
+
+def load_last_fingerprint() -> str | None:
+    try:
+        return json.loads(STATE_PATH.read_text(encoding="utf-8")).get("fingerprint")
+    except (OSError, ValueError):
+        return None
+
+
+def save_fingerprint(fingerprint: str) -> None:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps({"fingerprint": fingerprint}), encoding="utf-8")
+
+
+# ── Reporting ─────────────────────────────────────────────────────────────
+
+
+def build_report(checks: Dict[str, Dict[str, Any]], audit: Dict[str, List[Dict[str, str]]]) -> str:
+    lines = ["🛡️ Hermes health report", ""]
+
+    lines.append("System:")
+    for check in checks.values():
+        icon = "✅" if check["ok"] else "❌"
+        lines.append(f"{icon} {check['label']}: {check['detail']}")
+
+    if audit["revoked"]:
+        lines += ["", "Revoked keys (disabled in .env, need replacement):"]
+        lines += [f"🔴 {k['var']} ({k['name']}): {k['purpose']}" for k in audit["revoked"]]
+
+    if audit["missing"]:
+        lines += ["", "Not configured (optional unless marked):"]
+        for k in audit["missing"]:
+            marker = " REQUIRED" if k["required"] == "yes" else ""
+            lines.append(f"⚪ {k['var']} ({k['name']}): {k['purpose']}{marker}")
+
+    if audit["configured"]:
+        lines += ["", "Configured: " + ", ".join(k["name"] for k in audit["configured"])]
+
+    lines += [
+        "",
+        "To add a key: edit Hermes agent\\.env (never commit it), then restart the gateway.",
+        "Presence only is checked here; run `hermes doctor` to validate keys.",
     ]
-
-    # Service Status Section
-    lines.append("*📡 System & Daemon Status:*")
-    all_services_ok = True
-    for s_key, s_data in services.items():
-        icon = "✅" if s_data["ok"] else "❌"
-        if not s_data["ok"]:
-            all_services_ok = False
-        lines.append(f"{icon} *{s_data['label']}:* {s_data['detail']}")
-
-    lines.append("")
-
-    # Compromised / Revoked Section
-    if api_audit["compromised"]:
-        lines.append("⚠️ *Compromised / Revoked API Keys:*")
-        lines.append("_(These were disabled to protect account safety and prevent failover loops)_")
-        for k in api_audit["compromised"]:
-            lines.append(f"• 🔴 `{k['var']}` ({k['name']})")
-            lines.append(f"   ↳ _{k['description']}_")
-        lines.append("")
-
-    # Missing Optional Keys Section
-    if api_audit["missing"]:
-        lines.append("🔑 *Missing / Inactive API Keys:*")
-        lines.append("_(Add these to your local `.env` to unlock extra capabilities)_")
-        for k in api_audit["missing"]:
-            lines.append(f"• ⚪ `{k['var']}` ({k['name']})")
-            lines.append(f"   ↳ _{k['description']}_")
-        lines.append("")
-
-    # Active / Healthy Providers Section
-    if api_audit["configured"]:
-        lines.append("✨ *Active & Working Capabilities:*")
-        for k in api_audit["configured"]:
-            lines.append(f"• 🟢 `{k['var']}`: {k['name']}")
-        lines.append("")
-
-    # Instructions
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("📝 *How to add replacement keys:*")
-    lines.append("Open `Hermes agent\\.env` and paste your new keys:")
-    lines.append("```bash")
-    if api_audit["compromised"]:
-        for k in api_audit["compromised"]:
-            lines.append(f"{k['var']}=your_new_key_here")
-    lines.append("```")
-    lines.append("Hermes will automatically detect updated keys on next turn.")
-
     return "\n".join(lines)
 
 
 def send_to_telegram(message: str) -> bool:
-    """Send message to Telegram via hermes CLI."""
     hermes_bin = APP_DIR / "venv" / "Scripts" / "hermes.exe"
-    if not hermes_bin.exists():
-        hermes_bin = Path("hermes")
-
+    command = [str(hermes_bin) if hermes_bin.exists() else "hermes", "send", "--to", "telegram", message]
     try:
-        res = subprocess.run(
-            [str(hermes_bin), "send", "--to", "telegram", message],
-            cwd=str(APP_DIR),
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if res.returncode == 0:
-            print(f"[Watchdog] Successfully sent notification to Telegram: {res.stdout.strip()}")
-            return True
-        else:
-            print(f"[Watchdog] Hermes send error ({res.returncode}): {res.stderr.strip()}", file=sys.stderr)
-            return False
-    except Exception as exc:
-        print(f"[Watchdog] Execution failed: {exc}", file=sys.stderr)
+        result = subprocess.run(command, cwd=str(APP_DIR), capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[watchdog] send failed: {exc}", file=sys.stderr)
         return False
+    if result.returncode != 0:
+        print(f"[watchdog] hermes send exited {result.returncode}: {result.stderr.strip()}", file=sys.stderr)
+        return False
+    print(f"[watchdog] {result.stdout.strip()}")
+    return True
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Hermes Health & API Key Watchdog")
-    parser.add_argument(
-        "--notify-telegram",
-        action="store_true",
-        help="Send health report and missing API keys directly to Telegram",
-    )
-    parser.add_argument(
-        "--alert-on-error",
-        action="store_true",
-        help="Only send Telegram alert if services are down or compromised keys exist",
-    )
-    parser.add_argument(
-        "--cron",
-        action="store_true",
-        help="Hermes cron mode: emit alert directly to stdout if alert is needed, otherwise stay silent",
-    )
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Hermes health & API key watchdog")
+    parser.add_argument("--notify-telegram", action="store_true", help="Send the report to Telegram now")
+    parser.add_argument("--cron", action="store_true", help="Cron mode: print only when health state changes")
     args = parser.parse_args()
 
-    api_audit = check_api_keys()
-    services = check_runtime_services()
+    # Windows pipes default to cp1252, which cannot encode the report's emoji.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
 
-    has_compromised = bool(api_audit["compromised"])
-    has_service_down = any(not s["ok"] for s in services.values())
-    alert_needed = has_compromised or has_service_down
+    checks = {**check_services(), **check_resources()}
+    audit = audit_api_keys()
+    report = build_report(checks, audit)
 
-    alert_text = generate_telegram_alert(api_audit, services)
-
-    # Check if running interactively or inside a pipeline/cron
-    is_tty = sys.stdout.isatty()
-
-    if args.cron or not is_tty:
-        # Cron mode / pipeline mode: Hermes delivers non-empty stdout to Telegram
-        if alert_needed:
-            print(alert_text)
+    if args.cron or not sys.stdout.isatty():
+        fingerprint = health_fingerprint(checks, audit)
+        if fingerprint != load_last_fingerprint():
+            print(report)
+            save_fingerprint(fingerprint)
         return
 
-    print("[Watchdog] Auditing Hermes health and API keys...")
-    print("\n--- Diagnostic Summary ---")
-    print(f"Active Keys: {len(api_audit['configured'])}")
-    print(f"Compromised / Revoked: {len(api_audit['compromised'])}")
-    print(f"Missing Optional: {len(api_audit['missing'])}")
-    for s_name, s_data in services.items():
-        print(f"Service [{s_name}]: {'OK' if s_data['ok'] else 'FAIL'} - {s_data['detail']}")
-
-    if args.notify_telegram or (args.alert_on_error and alert_needed):
-        print("\n[Watchdog] Dispatching Telegram notification...")
-        send_to_telegram(alert_text)
-    else:
-        print("\n[Watchdog] Notification skipped (run with --notify-telegram to dispatch).")
+    print(report)
+    if args.notify_telegram:
+        send_to_telegram(report)
 
 
 if __name__ == "__main__":
