@@ -146,6 +146,10 @@ def run_tests():
     return passed == total
 
 
+def test_paper_integration_suite():
+    assert run_tests() is True
+
+
 if __name__ == "__main__":
     success = run_tests()
     sys.exit(0 if success else 1)

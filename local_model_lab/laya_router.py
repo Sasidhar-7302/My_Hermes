@@ -170,8 +170,61 @@ URGENCY_LOW = [
     "wishlist", "wishlists", "someday"
 ]
 
+# Deterministic tool & companion signatures for Jev-style System-1 routing
+TOOL_SIGNATURES = {
+    "smart_shutdown": ["shutdown", "shut down", "sleep pc", "power off", "when download finishes", "network idle"],
+    "deal_finder": ["best price", "cheapest", "find deal", "price drop", "compare price", "buy ", "shopping", "watchlist"],
+    "rpa_recorder": ["record macro", "replay macro", "rpa", "automate clicks", "macro studio"],
+    "paper_design": ["paper app", "paper design", "design in paper", "open paper", "artboard", "mockup"],
+    "screen_vision": ["what is on my screen", "describe screen", "screen capture", "take screenshot", "locate element"],
+    "window_manager": ["snap window", "move window", "focus window", "switch window", "list windows", "bring to front", "open app", "launch app", "open notepad", "open chrome", "open calculator"],
+    "security_guard": ["rm -rf", "format c:", "drop table", "delete system32", "confirm payment", "wire transfer"],
+}
+
+
+def _calibrated_distribution(scores: dict) -> dict:
+    """Computes a calibrated probability distribution over candidate keys."""
+    import math
+    total_raw = sum(max(0.0, float(v)) for v in scores.values())
+    if total_raw <= 0:
+        n = max(1, len(scores))
+        return {k: round(1.0 / n, 4) for k in scores}
+    # Temperature-scaled softmax for sharp yet calibrated System-1 confidence
+    exps = {k: math.exp(min(float(v) * 0.45, 20.0)) if v > 0 else 0.15 for k, v in scores.items()}
+    z = sum(exps.values())
+    return {k: round(v / z, 4) for k, v in exps.items()}
+
+
+def _classify_execution_tier(text: str, best_domain: str, target_tool: str, confidence: float) -> str:
+    """
+    Jev 4-tier 'Routed Support Desk' classification:
+    - PLAIN_CODE: Deterministic OS/window/shutdown/macro actions (0 LLM tokens)
+    -HUMAN_APPROVAL: Destructive, financial, or security-critical actions requiring Telegram approval
+    - LOCAL_LLM: Routine coding/CEO/operator tasks or high-privacy local inference
+    - CLOUD_LLM: Heavy multi-step architecture, deep code generation, or security audits
+    """
+    if any(k in text for k in ["rm -rf", "format ", "drop table", "checkout", "pay now", "wire transfer", "delete all"]):
+        return "HUMAN_APPROVAL"
+    if target_tool in ("smart_shutdown", "window_manager", "rpa_recorder") or best_domain == "OPERATOR":
+        return "PLAIN_CODE"
+    if best_domain in ("ARCHITECT", "SECURITY") or (best_domain == "CODER" and len(text) > 120):
+        return "CLOUD_LLM"
+    return "LOCAL_LLM"
+
+
+def _select_companion_surface(text: str, urgency: str, execution_tier: str) -> str:
+    """Selects the optimal OmniMesh companion surface (smartwatch, smartphone, laptop, desktop_pc)."""
+    if execution_tier == "HUMAN_APPROVAL" or urgency == "HIGH":
+        return "smartwatch"
+    if any(w in text for w in ["voice note", "quick", "alert", "notify", "on the go", "deal"]):
+        return "smartphone"
+    if any(w in text for w in ["monitor", "window", "paper", "desktop", "screenshot"]):
+        return "desktop_pc"
+    return "laptop"
+
+
 def route_request(task_text: str) -> dict:
-    start_time = time.time()
+    start_time = time.perf_counter()
     text = task_text.lower()
     
     # ── 1. Weighted Domain Scoring ───────────────────────────────────────────
@@ -231,19 +284,133 @@ def route_request(task_text: str) -> dict:
     elif any(re.search(r'\b' + re.escape(w) + r'\b', text) for w in URGENCY_LOW):
         urgency = "LOW"
 
-    # ── 4. Latency Constraint Enforcement (~33ms) ────────────────────────────
-    elapsed = time.time() - start_time
-    if elapsed < 0.033:
-        time.sleep(0.033 - elapsed)
-        
-    final_latency = int((time.time() - start_time) * 1000)
+    # ── 4. Calibrated Confidence, Tool, Execution Tier & Companion Surface ───
+    dist = _calibrated_distribution(scores)
+    confidence = dist.get(best_domain, 0.5) if scores[best_domain] > 0 else 0.35
+
+    target_tool = "general_agent"
+    for tool_name, phrases in TOOL_SIGNATURES.items():
+        if any(p in text for p in phrases):
+            target_tool = tool_name
+            break
+
+    execution_tier = _classify_execution_tier(text, best_domain, target_tool, confidence)
+    target_companion = _select_companion_surface(text, urgency, execution_tier)
+    final_latency = max(1, int((time.perf_counter() - start_time) * 1000))
 
     return {
         "domain": best_domain.upper(),
         "urgency": urgency.upper(),
         "latency_ms": final_latency,
-        "scores": scores
+        "scores": scores,
+        "confidence": confidence,
+        "execution_tier": execution_tier,
+        "target_tool": target_tool,
+        "target_companion": target_companion,
     }
+
+
+def predict_decisions(state, questions: list) -> list:
+    """
+    Jev / Laya Decision Model API supporting the 3 core decision primitives:
+      1. 'choice': Multi-class selection over options with calibrated probabilities.
+      2. 'score': Continuous [0.0, 1.0] scalar evaluation (urgency, risk, readiness).
+      3. 'noul': Choice with abstention ('NOUL' / None-Of-The-Above when confidence < abstain_threshold).
+    """
+    state_text = state if isinstance(state, str) else str(state)
+    base_route = route_request(state_text)
+    text_lower = state_text.lower()
+    results = []
+
+    for q in questions:
+        q_type = (q.get("type") or "choice").lower()
+        q_prompt = (q.get("question") or "").lower()
+        options = q.get("options") or []
+
+        if q_type == "score":
+            if "urgent" in q_prompt or "urgency" in q_prompt:
+                val = 0.92 if base_route["urgency"] == "HIGH" else (0.20 if base_route["urgency"] == "LOW" else 0.55)
+            elif "risk" in q_prompt or "danger" in q_prompt or "destruct" in q_prompt:
+                val = 0.95 if base_route["execution_tier"] == "HUMAN_APPROVAL" else 0.15
+            else:
+                val = base_route["confidence"]
+            results.append({
+                "type": "score",
+                "question": q.get("question"),
+                "score": round(float(val), 4),
+                "confidence": base_route["confidence"],
+            })
+
+        elif q_type in ("choice", "noul"):
+            abstain_threshold = float(q.get("abstain_threshold", 0.45))
+            opt_scores = {}
+            for opt in options:
+                opt_l = str(opt).lower()
+                s = 0.0
+                if opt_l.upper() in base_route["scores"]:
+                    s += float(base_route["scores"][opt_l.upper()])
+                if opt_l == base_route["target_tool"].lower() or opt_l == base_route["execution_tier"].lower():
+                    s += 8.0
+                if opt_l in text_lower:
+                    s += 5.0
+                for tok in re.findall(r"[a-z0-9_]+", opt_l):
+                    if len(tok) > 2 and tok in text_lower:
+                        s += 2.0
+                opt_scores[opt] = s
+
+            dist = _calibrated_distribution(opt_scores) if options else {}
+            best_opt = max(opt_scores, key=opt_scores.get) if options else "NOUL"
+            max_raw = opt_scores.get(best_opt, 0.0) if options else 0.0
+            best_prob = dist.get(best_opt, 0.0) if options else 0.0
+
+            if q_type == "noul" and (max_raw <= 0.0 or best_prob < abstain_threshold):
+                results.append({
+                    "type": "noul",
+                    "question": q.get("question"),
+                    "choice": "NOUL",
+                    "abstained": True,
+                    "confidence": round(1.0 - best_prob, 4),
+                    "distribution": dist,
+                })
+            else:
+                results.append({
+                    "type": q_type,
+                    "question": q.get("question"),
+                    "choice": best_opt,
+                    "abstained": False,
+                    "confidence": best_prob,
+                    "distribution": dist,
+                })
+
+    return results
+
+
+def evaluate_partial_transcript(partial_text: str, fire_threshold: float = 0.72) -> dict:
+    """
+    Evaluates a live partial voice/typing transcript (Jev streaming pattern).
+    Uses the NOUL abstention primitive to either fire an action mid-sentence
+    or wait for more tokens.
+    """
+    cleaned = (partial_text or "").strip()
+    if len(cleaned.split()) < 2:
+        return {
+            "action": "WAIT_FOR_MORE_INPUT",
+            "abstained": True,
+            "confidence": 0.0,
+            "route": None,
+        }
+
+    route = route_request(cleaned)
+    max_score = max(route["scores"].values()) if route["scores"] else 0
+    should_fire = (max_score >= 4 and route["confidence"] >= fire_threshold) or (route["target_tool"] != "general_agent")
+
+    return {
+        "action": "FIRE_EARLY" if should_fire else "WAIT_FOR_MORE_INPUT",
+        "abstained": not should_fire,
+        "confidence": route["confidence"],
+        "route": route,
+    }
+
 
 if __name__ == "__main__":
     import sys
@@ -251,3 +418,4 @@ if __name__ == "__main__":
     print(f"Input: {test_str}")
     result = route_request(test_str)
     print(f"Laya Output: {result}")
+

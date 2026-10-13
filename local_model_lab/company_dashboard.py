@@ -24,6 +24,26 @@ _parent_dir = os.path.dirname(_cur_dir)
 if _parent_dir not in sys.path:
     sys.path.insert(0, _parent_dir)
 
+# Load workspace .env variables into os.environ if not already set
+for _env_path in (
+    os.path.join(os.path.dirname(_parent_dir), ".env"),
+    os.path.join(_parent_dir, ".env"),
+    os.path.join(_cur_dir, ".env"),
+):
+    if os.path.exists(_env_path):
+        try:
+            with open(_env_path, "r", encoding="utf-8") as _ef:
+                for _line in _ef:
+                    _ls = _line.strip()
+                    if _ls and not _ls.startswith("#") and "=" in _ls:
+                        _k, _, _v = _ls.partition("=")
+                        _k = _k.strip()
+                        _v = _v.strip().strip('"').strip("'")
+                        if _k and _v and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
+
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse

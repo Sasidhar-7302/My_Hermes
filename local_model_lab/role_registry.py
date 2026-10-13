@@ -52,6 +52,7 @@ VERIFIED_MODELS = {
     "or-glm53":      {"id": "z-ai/glm-5.3",                 "provider": "openrouter", "latency_ms": 707, "quota": "OR Free Tier"},
     
     # LOCAL (Unlimited)
+    "local-hermes":  {"id": "hermes-local:latest", "provider": "ollama_local", "latency_ms": 1800,  "quota": "Unlimited"},
     "local-qwen9b":  {"id": "qwen3.5:9b",          "provider": "ollama_local", "latency_ms": 15402, "quota": "Unlimited"},
     "local-llama":   {"id": "llama3.1:latest",     "provider": "ollama_local", "latency_ms": 10794, "quota": "Unlimited"},
 }
@@ -67,42 +68,42 @@ def M(key):
 ROLES = {
     "CEO": {
         "soul": "You are the CEO. Delegate tasks, review outputs, and write lessons to memory.",
-        "models": [M("local-qwen9b"), M("groq-gpt120b"), M("gemini-flash")],
+        "models": [M("local-hermes"), M("local-qwen9b"), M("nim-120b"), M("groq-gpt120b"), M("gemini-flash")],
         "fire_threshold": 0.45,
     },
     "PM": {
         "soul": "You are the PM. Write clear specs, criteria, and priorities. No code.",
-        "models": [M("gemini-flash"), M("or-glm53"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("or-glm53"), M("nim-120b"), M("local-hermes"), M("gemini-flash"), M("groq-gpt120b"), M("local-qwen9b")],
         "fire_threshold": 0.70,
     },
     "ARCHITECT": {
         "soul": "You are the Architect. Design folder structures, schemas, APIs, and stack.",
-        "models": [M("nim-550b"), M("groq-gpt120b"), M("nim-120b"), M("local-qwen9b")],
+        "models": [M("nim-550b"), M("nim-120b"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
         "fire_threshold": 0.72,
     },
     "CODER": {
         "soul": "You are the Coder. Write clean, tested, documented code based on specs.",
-        "models": [M("nim-550b"), M("groq-qwen27b"), M("nim-120b"), M("local-qwen9b")],
+        "models": [M("nim-550b"), M("nim-120b"), M("or-deepseek"), M("local-hermes"), M("groq-qwen27b"), M("local-qwen9b")],
         "fire_threshold": 0.62,
     },
     "TESTER": {
         "soul": "You are the Tester. Write tests, find bugs, block bad code.",
-        "models": [M("groq-qwen27b"), M("or-deepseek"), M("gemini-flash"), M("local-qwen9b")],
+        "models": [M("or-deepseek"), M("nim-120b"), M("local-hermes"), M("groq-qwen27b"), M("gemini-flash"), M("local-qwen9b")],
         "fire_threshold": 0.68,
     },
     "SECURITY": {
         "soul": "You are the Security Auditor. Find OWASP flaws, hardcoded secrets. Block bad code.",
-        "models": [M("nim-550b"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("nim-550b"), M("nim-120b"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
         "fire_threshold": 0.78,
     },
     "DEVOPS": {
         "soul": "You are the DevOps Engineer. Write bash, CI/CD, docker. Fix infrastructure.",
-        "models": [M("groq-qwen27b"), M("nim-30b"), M("or-deepseek"), M("local-llama")],
+        "models": [M("nim-30b"), M("or-deepseek"), M("local-hermes"), M("groq-qwen27b"), M("local-llama")],
         "fire_threshold": 0.65,
     },
     "OPERATOR": {
         "soul": "You are the Desktop & Computer Operator. Execute safe OS actions, manage applications, control windows, and automate workflows with strict deletion and payment shields.",
-        "models": [M("local-qwen9b"), M("groq-qwen27b"), M("nim-120b")],
+        "models": [M("local-hermes"), M("local-qwen9b"), M("nim-120b"), M("groq-qwen27b")],
         "fire_threshold": 0.70,
     },
 }

@@ -10,18 +10,30 @@ from laya_router import route_request
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 _ENV = {}
-try:
-    with open(os.path.join(os.path.dirname(__file__), '..', '.env'), 'r', encoding='utf-8') as f:
-        for line in f:
-            if '=' in line and not line.startswith('#'):
-                k, _, v = line.partition('=')
-                _ENV[k.strip()] = v.strip()
-except Exception: pass
+for _env_candidate in (
+    os.path.join(os.path.dirname(__file__), '..', '..', '.env'),
+    os.path.join(os.path.dirname(__file__), '..', '.env'),
+    os.path.join(os.path.dirname(__file__), '.env'),
+):
+    try:
+        if os.path.exists(_env_candidate):
+            with open(_env_candidate, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line_s = line.strip()
+                    if '=' in line_s and not line_s.startswith('#'):
+                        k, _, v = line_s.partition('=')
+                        k_c = k.strip()
+                        v_c = v.strip().strip('"').strip("'")
+                        if v_c and k_c not in _ENV:
+                            _ENV[k_c] = v_c
+    except Exception:
+        pass
 
 def get_key(provider):
     key_name = PROVIDER_KEY_NAMES.get(provider)
-    if not key_name: return "no-key-needed"
-    return _ENV.get(key_name, '')
+    if not key_name:
+        return "no-key-needed"
+    return _ENV.get(key_name) or os.environ.get(key_name, '')
 
 def call_model(provider, model_id, messages, max_tokens=2048):
     base_url = PROVIDER_BASE_URLS.get(provider)
@@ -172,6 +184,10 @@ def dispatch_task(task: str):
     
     print("\n  Executing...")
     for m in role_def["models"]:
+        req_key_name = PROVIDER_KEY_NAMES.get(m['provider'])
+        if req_key_name and not get_key(m['provider']):
+            print(f"  -> Skipping {m['name']} ({req_key_name} not configured)")
+            continue
         print(f"  -> Attempting {m['name']}...", end="", flush=True)
         response, lat, err = call_model(m['provider'], m['id'], messages)
         if response:

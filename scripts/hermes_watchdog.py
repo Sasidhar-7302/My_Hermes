@@ -141,12 +141,12 @@ def check_services() -> Dict[str, Dict[str, Any]]:
     }
 
 
-def _free_commit_gb() -> float | None:
-    """Available commit charge (RAM + pagefile) in GB; ``None`` if unknown."""
+def _free_ram_gb() -> float | None:
+    """Available physical RAM in GB; ``None`` if unknown."""
     if sys.platform != "win32":
         try:
             import psutil
-            return (psutil.virtual_memory().available + psutil.swap_memory().free) / 1e9
+            return psutil.virtual_memory().available / 1e9
         except ImportError:
             return None
 
@@ -167,7 +167,7 @@ def _free_commit_gb() -> float | None:
     status.dwLength = ctypes.sizeof(MemoryStatusEx)
     if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
         return None
-    return status.ullAvailPageFile / 1e9
+    return status.ullAvailPhys / 1e9
 
 
 def check_resources() -> Dict[str, Dict[str, Any]]:
@@ -179,12 +179,12 @@ def check_resources() -> Dict[str, Dict[str, Any]]:
             "detail": f"{free_disk_gb:.1f} GB (minimum {MIN_FREE_DISK_GB:.0f} GB)",
         }
     }
-    free_commit = _free_commit_gb()
-    if free_commit is not None:
+    free_ram = _free_ram_gb()
+    if free_ram is not None:
         resources["memory"] = {
-            "ok": free_commit >= MIN_FREE_COMMIT_GB,
-            "label": "Available memory (RAM + pagefile)",
-            "detail": f"{free_commit:.1f} GB (minimum {MIN_FREE_COMMIT_GB:.0f} GB)",
+            "ok": free_ram >= MIN_FREE_COMMIT_GB,
+            "label": "Available physical RAM",
+            "detail": f"{free_ram:.1f} GB (minimum {MIN_FREE_COMMIT_GB:.0f} GB)",
         }
     return resources
 
@@ -275,7 +275,7 @@ def main() -> None:
     audit = audit_api_keys()
     report = build_report(checks, audit)
 
-    if args.cron or not sys.stdout.isatty():
+    if args.cron:
         fingerprint = health_fingerprint(checks, audit)
         if fingerprint != load_last_fingerprint():
             print(report)

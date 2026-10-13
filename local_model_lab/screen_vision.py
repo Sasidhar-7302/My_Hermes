@@ -46,6 +46,7 @@ def load_env_keys() -> Dict[str, str]:
     """Loads API keys from .env without polluting logging."""
     keys: Dict[str, str] = {}
     env_paths = [
+        Path(__file__).resolve().parents[2] / ".env",
         Path(__file__).resolve().parents[1] / ".env",
         Path(__file__).resolve().parent / ".env",
         Path(os.getcwd()) / ".env"
@@ -58,12 +59,14 @@ def load_env_keys() -> Dict[str, str]:
                         line = line.strip()
                         if line and not line.startswith("#") and "=" in line:
                             k, v = line.split("=", 1)
-                            keys[k.strip()] = v.strip().strip('"').strip("'")
+                            k_clean = k.strip()
+                            v_clean = v.strip().strip('"').strip("'")
+                            if v_clean and k_clean not in keys:
+                                keys[k_clean] = v_clean
             except Exception:
                 pass
-            break
     # Merge with os.environ
-    for k in ("GEMINI_API_KEY", "OPENROUTER_API_KEY", "OLLAMA_HOST"):
+    for k in ("GEMINI_API_KEY", "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "OLLAMA_HOST"):
         if k in os.environ and os.environ[k]:
             keys[k] = os.environ[k]
     return keys
@@ -142,14 +145,20 @@ class ScreenVision:
             return False
 
     def get_installed_ollama_vision_models(self) -> List[str]:
-        """Detects available vision-capable models in local Ollama."""
+        """Detects available vision-capable models in local Ollama, prioritizing local models over cloud proxies."""
         try:
             req = urllib.request.Request(f"{self.ollama_host}/api/tags", headers={"User-Agent": "Hermes-Vision"})
             with urllib.request.urlopen(req, timeout=2.0) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 models = [m.get("name", "") for m in data.get("models", [])]
-                vision_keywords = ["vl", "vision", "llava", "moondream", "bakllava"]
-                return [m for m in models if any(k in m.lower() for k in vision_keywords)]
+                vision_keywords = ["gemma4", "vl", "vision", "llava", "moondream", "bakllava"]
+                matched = [
+                    m for m in models
+                    if m.lower() == "hermes-local:latest" or any(k in m.lower() for k in vision_keywords)
+                ]
+                # Sort local on-device models ahead of :cloud proxy models
+                matched.sort(key=lambda m: (1 if "cloud" in m.lower() else 0, 0 if m.lower() == "hermes-local:latest" else 1))
+                return matched
         except Exception:
             return []
 
@@ -163,8 +172,7 @@ class ScreenVision:
 
         # 1. Try Local Ollama Vision
         vision_models = self.get_installed_ollama_vision_models()
-        if vision_models:
-            v_model = vision_models[0]
+        for v_model in vision_models[:2]:
             try:
                 payload = json.dumps({
                     "model": v_model,
@@ -183,7 +191,7 @@ class ScreenVision:
                     if text:
                         return f"[Local Vision ({v_model})]: {text}"
             except Exception as e:
-                logger.debug(f"Local Ollama vision failed: {e}")
+                logger.debug(f"Local Ollama vision ({v_model}) failed: {e}")
 
         # 2. Try Gemini Cloud Vision
         gemini_key = self.keys.get("GEMINI_API_KEY")
