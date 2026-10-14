@@ -238,26 +238,30 @@ body {
 
 /* Flanking Essential Bottom Controls */
 .watch-actions {
-    width: 78%;
+    width: 92%;
     display: flex;
-    justify-content: space-around;
+    justify-content: center;
     align-items: center;
+    gap: 4px;
     margin-bottom: 2px;
     z-index: 2;
+    flex-wrap: nowrap;
 }
 
 .action-chip {
     background: var(--card-oled);
     border: 1px solid var(--card-border);
-    border-radius: 20px;
-    padding: 7px 14px;
+    border-radius: 16px;
+    padding: 6px 7px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 3px;
     color: var(--text-pure);
     cursor: pointer;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
     transition: transform 0.1s ease, border-color 0.15s ease;
+    flex: 1;
+    justify-content: center;
 }
 
 .action-chip:active {
@@ -267,11 +271,11 @@ body {
 }
 
 .chip-icon {
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .chip-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
 }
 

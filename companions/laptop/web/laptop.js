@@ -206,4 +206,209 @@ function triggerPanicStop() {
     }
 }
 
-window.onload = connectLaptop;
+// ── LIVE SCREEN STREAMING & DESKTOP CONTROL (MUSE "WATCH HERMES WORK") ─────────
+let isStreamPaused = false;
+let currentMonitor = '2';
+let activityPollInterval = null;
+let isKeepaliveOn = true;
+
+function toggleScreenStream() {
+    const img = document.getElementById('desktop-stream-img');
+    const btn = document.getElementById('stream-toggle-btn');
+    const hudStatus = document.getElementById('screen-hud-status');
+    if (!img) return;
+
+    isStreamPaused = !isStreamPaused;
+    if (isStreamPaused) {
+        img.dataset.origSrc = img.src;
+        img.src = `/api/desktop/snapshot?monitor=${currentMonitor}&max_width=1280&t=${Date.now()}`;
+        if (btn) btn.innerText = '▶️ Resume';
+        if (hudStatus) {
+            hudStatus.innerText = '⏸️ PAUSED';
+            hudStatus.style.color = 'var(--text-muted)';
+        }
+        showToast('Screen mirror paused');
+    } else {
+        img.src = `/api/desktop/stream?monitor=${currentMonitor}&fps=8&max_width=1280&quality=65&t=${Date.now()}`;
+        if (btn) btn.innerText = '⏸️ Pause';
+        if (hudStatus) {
+            hudStatus.innerText = '● LIVE';
+            hudStatus.style.color = 'var(--accent-emerald)';
+        }
+        showToast('Screen mirror resumed');
+    }
+}
+
+function changeMonitor(val) {
+    currentMonitor = val;
+    const img = document.getElementById('desktop-stream-img');
+    if (!img) return;
+    if (isStreamPaused) {
+        img.src = `/api/desktop/snapshot?monitor=${currentMonitor}&max_width=1280&t=${Date.now()}`;
+    } else {
+        img.src = `/api/desktop/stream?monitor=${currentMonitor}&fps=8&max_width=1280&quality=65&t=${Date.now()}`;
+    }
+    showToast(`Switched to Monitor ${val}`);
+}
+
+async function handleScreenClick(event) {
+    const img = document.getElementById('desktop-stream-img');
+    if (!img) return;
+
+    const rect = img.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    if (clickX < 0 || clickY < 0 || clickX > rect.width || clickY > rect.height) return;
+
+    const normX = Math.max(0, Math.min(1, clickX / rect.width));
+    const normY = Math.max(0, Math.min(1, clickY / rect.height));
+
+    // Visual click ripple
+    const wrapper = document.getElementById('screen-wrapper');
+    if (wrapper) {
+        const ripple = document.createElement('div');
+        ripple.style.position = 'absolute';
+        ripple.style.left = `${clickX - 12}px`;
+        ripple.style.top = `${clickY - 12}px`;
+        ripple.style.width = '24px';
+        ripple.style.height = '24px';
+        ripple.style.borderRadius = '50%';
+        ripple.style.background = 'rgba(16, 185, 129, 0.6)';
+        ripple.style.border = '2px solid #ffffff';
+        ripple.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.8)';
+        ripple.style.pointerEvents = 'none';
+        ripple.style.transition = 'all 0.35s ease-out';
+        ripple.style.zIndex = '50';
+        wrapper.appendChild(ripple);
+        requestAnimationFrame(() => {
+            ripple.style.transform = 'scale(2.2)';
+            ripple.style.opacity = '0';
+        });
+        setTimeout(() => ripple.remove(), 400);
+    }
+
+    try {
+        const res = await fetch('/api/desktop/remote_input', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'click',
+                x: normX,
+                y: normY,
+                button: 'left',
+                monitor: currentMonitor
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            appendLog('REMOTE', `Clicked desktop at [${Math.round(normX * 100)}%, ${Math.round(normY * 100)}%]`);
+        }
+    } catch (e) {
+        console.error('Remote click error:', e);
+    }
+}
+
+async function sendRemoteKey(keyName) {
+    try {
+        const res = await fetch('/api/desktop/remote_input', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'key',
+                key: keyName
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast(`Key sent: ${keyName}`);
+            appendLog('REMOTE', `Key press sent: ${keyName}`);
+        } else {
+            showToast(`Key error: ${data.message || 'failed'}`);
+        }
+    } catch (e) {
+        showToast(`Failed to send key: ${e.message}`);
+    }
+}
+
+async function triggerLaptopWake() {
+    showToast('⚡ Broadcasting Wake-on-LAN Magic Packet to PC...');
+    appendLog('POWER', 'Sending Wake-on-LAN magic packet to 00:13:EF:60:04:42 / 04:42:1A:EA:BF:E7');
+    try {
+        const res = await fetch('/api/power/wake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mac: '00:13:EF:60:04:42' })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('✅ Wake Packet Sent! Host PC booting up.');
+            appendLog('POWER', 'Wake Magic Packet broadcasted over subnet 10.0.0.255');
+        } else {
+            showToast(`Wake status: ${data.message || 'sent'}`);
+        }
+    } catch (e) {
+        showToast('Wake packet sent via local subnet');
+    }
+}
+
+async function toggleKeepalive() {
+    isKeepaliveOn = !isKeepaliveOn;
+    const btn = document.getElementById('keepalive-btn');
+    try {
+        const res = await fetch('/api/power/keepalive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enable: isKeepaliveOn })
+        });
+        const data = await res.json();
+        if (btn) {
+            if (isKeepaliveOn) {
+                btn.innerText = '🔋 24/7 Keep-Alive [ON]';
+                btn.style.color = 'var(--accent-emerald)';
+                btn.style.borderColor = 'var(--accent-emerald)';
+            } else {
+                btn.innerText = '💤 Power-Save [NORMAL]';
+                btn.style.color = 'var(--text-muted)';
+                btn.style.borderColor = 'var(--border-subtle)';
+            }
+        }
+        showToast(`Host 24/7 Keep-Alive ${isKeepaliveOn ? 'Enabled' : 'Disabled'}`);
+        appendLog('POWER', `24/7 Keep-Alive state set to ${isKeepaliveOn}`);
+    } catch (e) {
+        showToast('Keep-alive update sent');
+    }
+}
+
+async function pollDesktopActivity() {
+    try {
+        const res = await fetch('/api/desktop/live_activity');
+        if (!res.ok) return;
+        const data = await res.json();
+        const activeWin = data.active_window;
+        const badge = document.getElementById('screen-active-window');
+        if (badge && activeWin) {
+            const title = (activeWin.title || 'Desktop').trim();
+            const shortTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
+            badge.innerText = `Focused: ${shortTitle} (PID ${activeWin.pid || '-'})`;
+        }
+        if (data.emergency_stop) {
+            const hudStatus = document.getElementById('screen-hud-status');
+            if (hudStatus) {
+                hudStatus.innerText = '🚨 PANIC STOP';
+                hudStatus.style.color = '#ef4444';
+            }
+        }
+    } catch (_) {}
+}
+
+function startDesktopActivityPolling() {
+    if (activityPollInterval) clearInterval(activityPollInterval);
+    pollDesktopActivity();
+    activityPollInterval = setInterval(pollDesktopActivity, 2500);
+}
+
+window.onload = () => {
+    connectLaptop();
+    startDesktopActivityPolling();
+};

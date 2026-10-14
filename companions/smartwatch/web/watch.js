@@ -372,6 +372,63 @@ function panicStop() {
     }
 }
 
+// ── WRIST DESKTOP PEEK & WAKE-ON-LAN ──────────────────────────────────────────
+async function refreshWatchScreen() {
+    const img = document.getElementById('watch-screen-img');
+    const focusEl = document.getElementById('watch-screen-focus');
+    if (img) {
+        img.src = `/api/desktop/snapshot?monitor=2&max_width=480&quality=65&t=${Date.now()}`;
+    }
+    try {
+        const res = await fetch('/api/desktop/live_activity');
+        if (res.ok) {
+            const data = await res.json();
+            if (focusEl && data.active_window) {
+                const title = (data.active_window.title || 'Desktop').trim();
+                focusEl.innerText = `Focused: ${title.substring(0, 26)}`;
+            }
+        }
+    } catch (_) {}
+    vibrate([30]);
+}
+
+function peekDesktopScreen() {
+    vibrate([40]);
+    const modal = document.getElementById('screen-modal');
+    if (modal) {
+        modal.classList.add('show');
+        refreshWatchScreen();
+    }
+}
+
+function dismissScreenModal() {
+    const modal = document.getElementById('screen-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+async function wakePcFromWatch() {
+    vibrate([80, 40, 80]);
+    showWatchToast('⚡ Waking PC...');
+    try {
+        const res = await fetch('/api/power/wake', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mac: '00:13:EF:60:04:42' })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            vibrate([150, 50, 150]);
+            showWatchToast('✅ PC WAKE SENT!');
+        } else {
+            showWatchToast('Wake: ' + (data.message || 'sent'));
+        }
+    } catch (e) {
+        showWatchToast('Wake sent via subnet');
+    }
+}
+
 // Attach Touch / Hold listeners to Voice Core
 function setupVoiceEventListeners() {
     const voiceBtn = document.getElementById('voice-core-btn');

@@ -49,6 +49,59 @@
             </div>
         </div>
 
+        <!-- Live Desktop Screen Mirror ("Watch Hermes Work" - Muse Style) -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                <div class="card-title">
+                    📺 Watch Hermes Work (Live Screen)
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <button class="screen-btn" id="stream-toggle-btn" onclick="toggleScreenStream()">⏸️ Pause</button>
+                    <select id="screen-monitor-select" class="screen-btn" onchange="changeMonitor(this.value)">
+                        <option value="2" selected>Mon 2 (Primary)</option>
+                        <option value="1">Mon 1 (Secondary)</option>
+                        <option value="all">Dual Monitors</option>
+                    </select>
+                </div>
+            </div>
+            <div class="screen-wrapper" id="screen-wrapper" onclick="handleScreenClick(event)">
+                <img id="desktop-stream-img" class="screen-stream-img" src="/api/desktop/stream?monitor=2&fps=8&max_width=960&quality=60" alt="Live Desktop Feed" />
+                <div class="screen-overlay-badge" id="screen-active-window">
+                    Focused: Desktop
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted);">
+                <span>Tap screen to click on PC</span>
+                <span id="screen-hud-status" style="color: var(--accent-emerald); font-weight: 600;">● STREAMING</span>
+            </div>
+            <!-- Quick Desktop Remote Controls -->
+            <div class="screen-controls">
+                <button class="screen-btn" onclick="sendRemoteKey('enter')">⏎ Enter</button>
+                <button class="screen-btn" onclick="sendRemoteKey('esc')">Esc</button>
+                <button class="screen-btn" onclick="sendRemoteKey('win')">⊞ Win</button>
+                <button class="screen-btn" onclick="sendRemoteKey('tab')">⇥ Tab</button>
+                <button class="screen-btn" onclick="sendRemoteKey('volume_up')">🔊 Vol+</button>
+                <button class="screen-btn" onclick="sendRemoteKey('volume_down')">🔉 Vol-</button>
+                <button class="screen-btn" onclick="sendRemoteKey('mute')">🔇 Mute</button>
+            </div>
+        </div>
+
+        <!-- 24/7 Power & Remote Wake-on-LAN -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="card-title">
+                    ⚡ Host Power & Wake-on-LAN
+                </div>
+                <span id="power-status-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 3px 8px; border-radius: 4px;">
+                    AWAKE 24/7
+                </span>
+            </div>
+            <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">If host PC is sleeping or off, send a Wake-on-LAN magic packet over Wi-Fi to wake it up instantly:</p>
+            <button class="action-btn" style="background: rgba(16, 185, 129, 0.2); border-color: var(--accent-emerald); color: #ffffff;" onclick="triggerPhoneWake()">
+                <span>⚡ Wake Hermes PC Now</span>
+            </button>
+        </div>
+
         <!-- Camera Vision & Voice Card -->
         <div class="card">
             <div class="card-title">

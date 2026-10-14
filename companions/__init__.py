@@ -127,6 +127,51 @@ def register_companion_routes(app: FastAPI):
     async def get_companion_sw():
         return Response(content=get_smartphone_sw(), media_type="application/javascript")
 
+    # ── TURNKEY 1-CLICK ONBOARDING & CONNECT HUB ─────────────────────────────
+    @app.get("/connect", response_class=HTMLResponse)
+    async def get_connect_hub_page():
+        from .connect_page import render_connect_hub_html
+        from .auth import get_pairing_manager
+        pm = get_pairing_manager()
+        pair_code = pm.create_pairing_code(ttl_seconds=1800)
+        phone_qr = hub.get_pairing_qr("smartphone")
+        watch_qr = hub.get_pairing_qr("smartwatch")
+        laptop_url = hub.get_companion_url("laptop", pairing_code=pair_code)
+        return HTMLResponse(content=render_connect_hub_html(
+            lan_ip=hub.lan_ip,
+            port=hub.port,
+            pairing_code=pair_code,
+            phone_qr_b64=phone_qr,
+            watch_qr_b64=watch_qr,
+            laptop_url=laptop_url,
+        ))
+
+    @app.get("/api/power/download/{script_type}")
+    async def download_wake_script(script_type: str):
+        from local_model_lab.hermes_power import generate_standalone_wake_scripts
+        scripts = generate_standalone_wake_scripts()
+        st = script_type.lower()
+        if st in ("bat", "cmd"):
+            p = scripts["bat"]
+            fname = "Wake-Hermes.bat"
+            media = "application/x-bat"
+        elif st in ("sh", "bash"):
+            p = scripts["sh"]
+            fname = "wake_hermes.sh"
+            media = "application/x-sh"
+        else:
+            p = scripts["py"]
+            fname = "wake_hermes.py"
+            media = "text/x-python"
+        
+        with open(p, "rb") as f:
+            content = f.read()
+        return Response(
+            content=content,
+            media_type=media,
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'}
+        )
+
     # ── COMPANION LOGS & AUTH ADMIN APIS ────────────────────────────────────
     @app.get("/api/mesh/logs")
     async def get_mesh_logs(limit: int = 50, level: Optional[str] = None):

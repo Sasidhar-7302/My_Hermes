@@ -45,8 +45,9 @@ for _env_path in (
             pass
 
 
+import asyncio
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 import uvicorn
 
 try:
@@ -792,6 +793,145 @@ async def api_media_control(request: Request):
         else:
             return JSONResponse(content={"status": "error", "message": f"Unknown action: {action}"}, status_code=400)
         return JSONResponse(content=res)
+    except Exception as exc:
+        return JSONResponse(content={"status": "error", "message": str(exc)}, status_code=500)
+
+
+# ── LIVE DESKTOP SCREEN STREAMING & REMOTE INPUT (MUSE "WATCH IT WORK") ────
+
+@app.get("/api/desktop/stream")
+async def api_desktop_stream(
+    monitor: str = "2",
+    fps: int = 8,
+    quality: int = 60,
+    max_width: int = 960
+):
+    """
+    Real-time MJPEG live stream of the Windows desktop.
+    Universally supported by iOS Safari, Android Chrome, WearOS, and Desktop browsers.
+    """
+    from local_model_lab.desktop_streamer import get_desktop_streamer
+    streamer = get_desktop_streamer()
+    fps = max(1, min(fps, 15))
+    sleep_interval = 1.0 / float(fps)
+
+    async def frame_generator():
+        while True:
+            t0 = time.time()
+            frame_bytes, _, _ = streamer.capture_frame(monitor_id=monitor, max_width=max_width, quality=quality)
+            if frame_bytes:
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                )
+            elapsed = time.time() - t0
+            to_sleep = max(0.01, sleep_interval - elapsed)
+            await asyncio.sleep(to_sleep)
+
+    return StreamingResponse(
+        frame_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.get("/api/desktop/snapshot")
+async def api_desktop_snapshot(monitor: str = "2", max_width: int = 1280, quality: int = 75):
+    """Returns a single high-resolution screenshot JPEG."""
+    from local_model_lab.desktop_streamer import get_desktop_streamer
+    streamer = get_desktop_streamer()
+    frame_bytes, _, _ = streamer.capture_frame(monitor_id=monitor, max_width=max_width, quality=quality)
+    if not frame_bytes:
+        return Response(content=b"", media_type="image/jpeg", status_code=500)
+    return Response(
+        content=frame_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+    )
+
+
+@app.get("/api/desktop/live_activity")
+async def api_desktop_live_activity():
+    """Returns active window, cursor location, Laya decision, and emergency stop status."""
+    from local_model_lab.desktop_streamer import get_desktop_streamer
+    streamer = get_desktop_streamer()
+    return JSONResponse(content=streamer.get_live_activity())
+
+
+@app.post("/api/desktop/remote_input")
+async def api_desktop_remote_input(request: Request):
+    """Translates companion touch/clicks and keys into Windows inputs."""
+    try:
+        data = await request.json()
+        inp_type = str(data.get("type", "click")).lower()
+        if inp_type in ("click", "tap"):
+            from local_model_lab.desktop_streamer import inject_remote_mouse_click
+            norm_x = float(data.get("x", 0.5))
+            norm_y = float(data.get("y", 0.5))
+            button = str(data.get("button", "left"))
+            monitor = str(data.get("monitor", "2"))
+            res = inject_remote_mouse_click(norm_x, norm_y, button=button, monitor_id=monitor)
+            return JSONResponse(content=res)
+        elif inp_type == "key":
+            from local_model_lab.desktop_streamer import inject_remote_key_press
+            key_name = str(data.get("key", "enter"))
+            res = inject_remote_key_press(key_name)
+            return JSONResponse(content=res)
+        elif inp_type in ("focus", "focus_window"):
+            from local_model_lab.window_services import focus_window
+            target = str(data.get("target", ""))
+            ok = focus_window(target)
+            return JSONResponse(content={"status": "success" if ok else "not_found", "target": target})
+        return JSONResponse(content={"status": "error", "message": f"Unknown input type: {inp_type}"}, status_code=400)
+    except Exception as exc:
+        return JSONResponse(content={"status": "error", "message": str(exc)}, status_code=500)
+
+
+# ── HERMES 24/7 POWER & WAKE-ON-LAN APIS ──────────────────────────────────────
+
+@app.get("/api/power/wol_info")
+async def api_power_wol_info():
+    from local_model_lab.hermes_power import get_wol_profiles, is_keepalive_active
+    return JSONResponse(content={
+        "keepalive_active": is_keepalive_active(),
+        "profiles": get_wol_profiles(),
+        "primary_mac": "00:13:EF:60:04:42",
+        "ethernet_mac": "04:42:1A:EA:BF:E7",
+        "ip": "10.0.0.60",
+        "broadcast": "10.0.0.255",
+        "port": 9
+    })
+
+
+@app.post("/api/power/wake")
+async def api_power_wake(request: Request):
+    """Sends Wake-on-LAN magic packet."""
+    try:
+        data = await request.json() if (await request.body()) else {}
+    except Exception:
+        data = {}
+    mac = str(data.get("mac", "00:13:EF:60:04:42"))
+    from local_model_lab.hermes_power import send_wake_on_lan
+    res = send_wake_on_lan(mac_address=mac)
+    return JSONResponse(content=res)
+
+
+@app.get("/api/power/keepalive")
+async def api_power_keepalive_get():
+    from local_model_lab.hermes_power import is_keepalive_active
+    return JSONResponse(content={"active": is_keepalive_active()})
+
+
+@app.post("/api/power/keepalive")
+async def api_power_keepalive_post(request: Request):
+    try:
+        data = await request.json()
+        enable = bool(data.get("enable", True))
+        from local_model_lab.hermes_power import enable_24_7_keepalive, disable_keepalive
+        if enable:
+            ok = enable_24_7_keepalive(allow_display_sleep=True)
+        else:
+            ok = disable_keepalive()
+        return JSONResponse(content={"status": "ok", "active": ok})
     except Exception as exc:
         return JSONResponse(content={"status": "error", "message": str(exc)}, status_code=500)
 

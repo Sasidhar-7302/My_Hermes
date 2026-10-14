@@ -49,10 +49,31 @@
                 <span class="chip-icon">📋</span>
                 <span class="chip-label">Clip</span>
             </button>
+            <button class="action-chip" onclick="peekDesktopScreen()" title="Watch Hermes Work">
+                <span class="chip-icon">🖥️</span>
+                <span class="chip-label">Peek</span>
+            </button>
+            <button class="action-chip" onclick="wakePcFromWatch()" title="Wake PC (WoL)">
+                <span class="chip-icon">⚡</span>
+                <span class="chip-label">Wake</span>
+            </button>
             <button class="action-chip panic" onclick="panicStop()" title="Emergency Panic Stop">
                 <span class="chip-icon">🚨</span>
                 <span class="chip-label">Stop</span>
             </button>
+        </div>
+
+        <!-- Slide-up Desktop Screen Peek Modal (Watch Hermes Work) -->
+        <div id="screen-modal" class="reply-modal" onclick="dismissScreenModal()">
+            <div class="modal-card" style="padding: 10px; max-height: 88%;">
+                <div class="modal-header">
+                    <span class="modal-tag">📺 WATCH HERMES</span>
+                    <span class="modal-close">&times;</span>
+                </div>
+                <div id="watch-screen-focus" style="font-size: 10px; color: var(--accent-emerald); font-weight: 700; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Focused: Desktop</div>
+                <img id="watch-screen-img" src="" style="width: 100%; max-height: 130px; object-fit: contain; border-radius: 8px; border: 1px solid var(--card-border); background: #000;" alt="PC Screen" onclick="event.stopPropagation(); refreshWatchScreen();">
+                <div class="modal-hint" style="margin-top: 6px;">Tap image to refresh • Tap outside to close</div>
+            </div>
         </div>
 
         <!-- Slide-up Agent Reply Modal -->

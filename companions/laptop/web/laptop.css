@@ -152,3 +152,63 @@ body {
     opacity: 1;
     transform: translateY(0);
 }
+
+/* Screen Mirror Canvas & Remote Controls */
+.screen-wrapper {
+    position: relative;
+    width: 100%;
+    background: #000000;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    cursor: crosshair;
+}
+
+.laptop-stream-img {
+    width: 100%;
+    display: block;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    background: #05080c;
+}
+
+.screen-overlay-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--accent-emerald);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.screen-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.screen-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-pure);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.screen-btn:hover {
+    border-color: var(--accent-emerald);
+    background: var(--accent-emerald-dim);
+}
