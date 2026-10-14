@@ -222,6 +222,83 @@ def register_companion_routes(app: FastAPI):
         code = get_pairing_manager().create_pairing_code(ttl_seconds=600)
         return JSONResponse(content={"pairing_code": code, "expires_in": 600})
 
+    # ── ALWAYS-ON GEOLOCATION INTELLIGENCE & CONTEXT APIS ───────────────────
+    @app.get("/api/location/current")
+    async def get_current_location_route():
+        from local_model_lab.hermes_location import get_location_engine
+        engine = get_location_engine()
+        return JSONResponse(content=engine.get_current())
+
+    @app.post("/api/location/update")
+    async def update_location_route(request: Request):
+        from local_model_lab.hermes_location import get_location_engine
+        data = await request.json()
+        lat = data.get("latitude")
+        lon = data.get("longitude")
+        if lat is None or lon is None:
+            return JSONResponse(content={"error": "latitude and longitude required"}, status_code=400)
+        engine = get_location_engine()
+        res = engine.update_location(
+            latitude=float(lat),
+            longitude=float(lon),
+            accuracy=float(data.get("accuracy", 0.0)),
+            altitude=data.get("altitude"),
+            speed=data.get("speed"),
+            heading=data.get("heading"),
+            source_device=str(data.get("device_id", "manual-api")),
+            source_type=str(data.get("source_type", "smartphone")),
+        )
+        return JSONResponse(content=res)
+
+    @app.post("/api/location/set_home")
+    async def set_home_location_route(request: Request):
+        from local_model_lab.hermes_location import get_location_engine
+        data = {}
+        try:
+            data = await request.json()
+        except Exception:
+            pass
+        engine = get_location_engine()
+        res = engine.set_home(
+            latitude=float(data["latitude"]) if "latitude" in data else None,
+            longitude=float(data["longitude"]) if "longitude" in data else None,
+        )
+        return JSONResponse(content=res)
+
+    @app.get("/api/location/history")
+    async def get_location_history_route():
+        from local_model_lab.hermes_location import get_location_engine
+        engine = get_location_engine()
+        return JSONResponse(content={"history": engine.get_history()})
+
+    # ── COMPANION MATRIX: SCREEN SNAPSHOT & DEVICE PING APIS ────────────────
+    @app.post("/api/mesh/ping_device")
+    async def ping_mesh_device(request: Request):
+        data = await request.json()
+        dev_id = str(data.get("device_id", ""))
+        tone = str(data.get("tone", "chime"))
+        if not dev_id:
+            return JSONResponse(content={"error": "device_id required"}, status_code=400)
+        ok = await hub.ping_device(dev_id, tone=tone)
+        return JSONResponse(content={"status": "sent" if ok else "device_offline", "device_id": dev_id})
+
+    @app.post("/api/mesh/request_snapshot")
+    async def request_companion_snapshot(request: Request):
+        data = await request.json()
+        dev_id = str(data.get("device_id", ""))
+        if not dev_id:
+            return JSONResponse(content={"error": "device_id required"}, status_code=400)
+        ok = await hub.request_screen_snapshot(dev_id)
+        return JSONResponse(content={"status": "requested" if ok else "device_offline", "device_id": dev_id})
+
+    @app.get("/api/mesh/companion_snapshots")
+    async def get_companion_snapshots():
+        return JSONResponse(content={"snapshots": hub.device_snapshots})
+
+    @app.get("/api/mesh/watch_hud")
+    async def get_watch_hud_route():
+        return JSONResponse(content={"hud": hub.watch_hud_state})
+
 
 
 __all__ = [

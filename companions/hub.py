@@ -137,6 +137,18 @@ class OmniMeshHub:
         self.lan_ip: str = get_local_lan_ip()
         self._gateway_listener: Optional[Callable[[str, str, str, str], Awaitable[None]]] = None
 
+        # Battery-Preserving Screen Wall & HUD State
+        self.device_snapshots: Dict[str, Dict[str, Any]] = {}
+        self.watch_hud_state: Dict[str, Any] = {
+            "time": time.strftime("%H:%M"),
+            "battery": None,
+            "is_charging": False,
+            "voice_state": "idle",
+            "last_message": "Ready",
+            "last_seen": time.time(),
+        }
+        self._battery_alert_state: Dict[str, Dict[str, Any]] = {}
+
         # Seed host desktop node
         self.devices["desktop-host"] = MeshDevice(
             device_id="desktop-host",
@@ -146,6 +158,54 @@ class OmniMeshHub:
             connected=True,
             metadata={"os": sys.platform, "role": "Primary AI Core"},
         )
+
+    def check_battery_guardian(self, dev: MeshDevice):
+        """Monitors companion battery health and sends timely alerts without user distraction."""
+        if dev.battery_level is None:
+            return
+        state = self._battery_alert_state.setdefault(dev.device_id, {"low_notified": False, "full_notified": False})
+
+        # Low Battery Alert (< 20%)
+        if dev.battery_level <= 20 and not dev.is_charging and not state["low_notified"]:
+            state["low_notified"] = True
+            self.notify_all(
+                title=f"⚠️ Low Battery ({dev.name})",
+                body=f"{dev.name} is at {dev.battery_level}%. Connect charger to stay connected to Hermes.",
+                vibrate=True,
+            )
+            log_companion_event("BATTERY_LOW", f"{dev.name} battery critical ({dev.battery_level}%)", device_id=dev.device_id)
+        elif dev.battery_level > 25:
+            state["low_notified"] = False
+
+        # Full Battery Alert (100% on charger)
+        if dev.battery_level >= 100 and dev.is_charging and not state["full_notified"]:
+            state["full_notified"] = True
+            self.notify_all(
+                title=f"🔋 Battery Full ({dev.name})",
+                body=f"{dev.name} reached 100%. Unplug to protect battery longevity.",
+                vibrate=False,
+            )
+            log_companion_event("BATTERY_FULL", f"{dev.name} is fully charged (100%)", device_id=dev.device_id)
+        elif not dev.is_charging:
+            state["full_notified"] = False
+
+    async def request_screen_snapshot(self, device_id: str) -> bool:
+        """Requests an on-demand, battery-preserving single screen snapshot from companion."""
+        return await self.send_to_device(device_id, {
+            "type": "request_screen_snapshot",
+            "timestamp": time.time(),
+        })
+
+    async def ping_device(self, device_id: str, tone: str = "chime") -> bool:
+        """Acoustically pings and vibrates companion device to find it in the room."""
+        ok = await self.send_to_device(device_id, {
+            "type": "ping_device",
+            "tone": tone,
+            "timestamp": time.time(),
+        })
+        if ok:
+            log_companion_event("DEVICE_PINGED", f"Sent acoustic ping to {device_id}", device_id=device_id)
+        return ok
 
     def set_gateway_listener(self, listener: Callable[[str, str, str, str], Awaitable[None]]) -> None:
         """Hooks the Hermes Gateway Companion Adapter to process inbound device prompts."""
@@ -357,6 +417,7 @@ class OmniMeshHub:
                         float(data.get("ram", 0)),
                         dev.battery_level,
                     )
+                self.check_battery_guardian(dev)
 
         # 2. Clipboard Synchronization (Device -> PC & other devices)
         elif msg_type == "clipboard_push":
@@ -458,6 +519,71 @@ class OmniMeshHub:
             if photo_b64:
                 asyncio.create_task(self._process_camera_photo(device_id, photo_b64, prompt_text))
 
+        # 7. Low-Power Location Telemetry (Always-on Geofencing & Weather Context)
+        elif msg_type == "location_telemetry":
+            lat = data.get("latitude")
+            lon = data.get("longitude")
+            if lat is not None and lon is not None:
+                try:
+                    from local_model_lab.hermes_location import get_location_engine
+                    loc_engine = get_location_engine()
+                    dev = self.devices.get(device_id)
+                    dev_type = dev.device_type if dev else data.get("source_type", "smartphone")
+                    updated = loc_engine.update_location(
+                        latitude=float(lat),
+                        longitude=float(lon),
+                        accuracy=float(data.get("accuracy", 0.0)),
+                        altitude=data.get("altitude"),
+                        speed=data.get("speed"),
+                        heading=data.get("heading"),
+                        source_device=device_id,
+                        source_type=dev_type,
+                    )
+                    # Broadcast location update to PC dashboards
+                    await self.broadcast_event({
+                        "type": "location_updated",
+                        "location": updated,
+                    })
+                except Exception as exc:
+                    logger.debug(f"Location telemetry ingestion error: {exc}")
+
+        # 8. Battery-Preserving Companion Screen Snapshot
+        elif msg_type == "companion_screen_snapshot":
+            img = data.get("image", "")
+            if img:
+                snap_entry = {
+                    "image": img,
+                    "width": data.get("width"),
+                    "height": data.get("height"),
+                    "battery": data.get("battery"),
+                    "is_charging": data.get("is_charging"),
+                    "device_type": data.get("device_type", "smartphone"),
+                    "device_id": device_id,
+                    "timestamp": time.time(),
+                }
+                self.device_snapshots[device_id] = snap_entry
+                await self.broadcast_event({
+                    "type": "screen_snapshot_received",
+                    "device_id": device_id,
+                    "snapshot": snap_entry,
+                })
+
+        # 9. Smartwatch Real-Time Wrist HUD Micro-Telemetry (Zero Battery Drain)
+        elif msg_type == "watch_hud_telemetry":
+            self.watch_hud_state.update({
+                "time": data.get("time", time.strftime("%H:%M")),
+                "battery": data.get("battery"),
+                "is_charging": data.get("is_charging", False),
+                "voice_state": data.get("voice_state", "idle"),
+                "last_message": data.get("last_message", ""),
+                "heart_rate": data.get("heart_rate"),
+                "last_seen": time.time(),
+            })
+            await self.broadcast_event({
+                "type": "watch_hud_updated",
+                "hud": self.watch_hud_state,
+            })
+
     async def _dispatch_prompt(self, device_id: str, device_type: str, device_name: str, prompt: str):
         """Dispatches companion prompt into Hermes Gateway or company dispatcher."""
         # Fast System 1 Gate: Check if deterministic tool can execute immediately
@@ -472,10 +598,50 @@ class OmniMeshHub:
         except Exception as exc:
             logger.debug(f"System 1 bypass error: {exc}")
 
+        # Location Intelligence Gate: Instant accurate answer for user location & weather queries
+        lower_prompt = prompt.lower().strip()
+        if any(q in lower_prompt for q in ["where am i", "what is my location", "what's my location", "am i home", "what is the weather", "what's the weather", "how far am i from home", "what city am i in"]):
+            try:
+                from local_model_lab.hermes_location import get_location_engine
+                engine = get_location_engine()
+                cur = engine.get_current()
+                if "weather" in lower_prompt:
+                    w = cur.get("weather", {})
+                    if w:
+                        cond = w.get("condition", "Clear")
+                        temp_f = w.get("temperature_f", "70")
+                        temp_c = w.get("temperature_c", "21")
+                        hum = w.get("humidity", 50)
+                        wind = w.get("wind_speed_kmh", 10)
+                        ans = f"🌤️ Current Weather: {cond}, {temp_f}°F ({temp_c}°C) with {hum}% humidity and wind at {wind} km/h (at {cur.get('display_name', 'your location')})."
+                    else:
+                        ans = f"Weather lookup pending satellite telemetry for {cur.get('display_name', 'your location')}."
+                    await self.send_agent_reply(device_id, ans, prompt)
+                    return
+                elif any(q in lower_prompt for q in ["where am i", "my location", "am i home", "how far", "what city"]):
+                    zone = cur.get("zone", "Home Cockpit")
+                    disp = cur.get("display_name", "Home Cockpit")
+                    dist = cur.get("distance_to_home_meters", 0)
+                    dist_str = f"({dist:.0f}m from Home Cockpit)" if dist and zone != "Home Cockpit" else "(At Home Cockpit)"
+                    src = cur.get("source_type", "companion")
+                    ans = f"📍 You are currently in **{zone}** {dist_str} at {disp}. [GPS Telemetry synced from your {src}]"
+                    await self.send_agent_reply(device_id, ans, prompt)
+                    return
+            except Exception as exc:
+                logger.debug(f"Location instant answer error: {exc}")
+
+        # Enrich prompt with environmental context for all general queries
+        try:
+            from local_model_lab.hermes_location import get_location_engine
+            ctx_snippet = get_location_engine().get_environmental_context_prompt()
+            enriched_prompt = f"[{ctx_snippet}]\n{prompt}"
+        except Exception:
+            enriched_prompt = prompt
+
         # Check if gateway listener is hooked
         if self._gateway_listener:
             try:
-                await self._gateway_listener(device_id, device_type, device_name, prompt)
+                await self._gateway_listener(device_id, device_type, device_name, enriched_prompt)
                 return
             except Exception as exc:
                 log_companion_event("GATEWAY_DISPATCH_ERROR", f"Gateway listener failed: {exc}", level="WARNING", device_id=device_id)
@@ -483,7 +649,7 @@ class OmniMeshHub:
         # Fallback to channel dispatcher
         try:
             from channels import default_channel_dispatcher
-            response = await default_channel_dispatcher(prompt, channel="companion", user_id=device_id)
+            response = await default_channel_dispatcher(enriched_prompt, channel="companion", user_id=device_id)
         except Exception as exc:
             response = f"Hermes Agent error: {str(exc)}"
 
@@ -549,6 +715,13 @@ class OmniMeshHub:
     def get_status_overview(self) -> Dict[str, Any]:
         """Returns serializable overview of the mesh ecosystem and auth status."""
         pm = get_pairing_manager()
+        loc_data = {}
+        try:
+            from local_model_lab.hermes_location import get_location_engine
+            loc_data = get_location_engine().get_current()
+        except Exception:
+            pass
+
         return {
             "hub_ip": self.lan_ip,
             "hub_port": self.port,
@@ -562,6 +735,21 @@ class OmniMeshHub:
             "devices": [d.to_dict() for d in self.devices.values()],
             "paired_devices": pm.list_paired_devices(),
             "recent_logs": get_recent_companion_logs(limit=20),
+            "location": loc_data,
+            "watch_hud": self.watch_hud_state,
+            "snapshots": {
+                k: {
+                    "device_id": v.get("device_id", k),
+                    "device_type": v.get("device_type", "unknown"),
+                    "battery": v.get("battery"),
+                    "is_charging": v.get("is_charging"),
+                    "timestamp": v.get("timestamp"),
+                    "width": v.get("width"),
+                    "height": v.get("height"),
+                    "image": v.get("image", ""),
+                }
+                for k, v in self.device_snapshots.items()
+            },
         }
 
 

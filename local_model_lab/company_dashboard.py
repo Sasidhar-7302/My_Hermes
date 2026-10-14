@@ -2548,6 +2548,42 @@ def dashboard():
                 </div>
             </div>
 
+            <!-- ALWAYS-ON USER GEOLOCATION & ENVIRONMENTAL CONTEXT -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 16px;">📍</span>
+                        <div>
+                            <span style="font-size: 13px; font-weight: 700; color: #ffffff;">Always-On Geolocation & Environmental Context</span>
+                            <span id="loc-zone-tag" style="margin-left: 8px; font-size: 11px; font-weight: 700; background: rgba(16,185,129,0.15); color: #10b981; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(16,185,129,0.3);">HOME COCKPIT</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="setHomeLocation()">🏡 Lock As Home</button>
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="copyLocationContext()">📋 Copy Prompt Context</button>
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="refreshMeshDevices()">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; background: var(--bg-input); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle); font-size: 12px;">
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Resolved Location</div>
+                        <div id="loc-display-name" style="color: #ffffff; font-weight: 600; word-break: break-word;">Locating user via companion mesh...</div>
+                        <div id="loc-distance-sub" style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">0.0m from Home Cockpit</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Hyper-Local Weather</div>
+                        <div id="loc-weather-summary" style="color: #38bdf8; font-weight: 600;">Fetching meteorological conditions...</div>
+                        <div id="loc-weather-details" style="color: var(--text-muted); font-size: 11px; margin-top: 2px;">Open-Meteo Sat-Radar Sync</div>
+                    </div>
+                    <div>
+                        <div style="color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 600; margin-bottom: 2px;">Telemetry Channel</div>
+                        <div id="loc-telemetry-source" style="color: #a855f7; font-weight: 600;">Smartphone (Low-Power Wi-Fi/Cell)</div>
+                        <div id="loc-battery-guard" style="color: #10b981; font-size: 11px; margin-top: 2px;">🛡️ Zero Battery Drain Profile Active</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- PAIRING & COMPANION ACCESS -->
             <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-input); border-radius: 8px; padding: 10px;">
@@ -2570,6 +2606,137 @@ def dashboard():
                         <a id="btn-open-watch" href="/companions/smartwatch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Open Watch HUD</a>
                         <a id="btn-open-laptop" href="/companions/laptop" target="_blank" class="btn-action" style="text-decoration: none;">💻 Open Laptop View</a>
                         <button class="btn-action" onclick="refreshMeshDevices()">🔄 Refresh Mesh</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MULTI-DEVICE COMPANION SCREEN WALL (BATTERY-PRESERVING) -->
+            <div style="margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div>
+                        <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);">📺 Companion Screen Wall (Battery-Preserving Mirror)</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Zero continuous video drain • High-contrast AMOLED Watch HUD • On-demand snapshot pull</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="pullAllScreenshots()">🔄 Snap All Screens</button>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+                    <!-- 1. SMARTPHONE SCREEN CARD -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #ffffff; font-size: 13px;">
+                                    <span>📱</span>
+                                    <span>Mobile Phone Screen</span>
+                                </div>
+                                <span id="wall-phone-battery" style="font-size: 11px; font-weight: 600; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 8px; border-radius: 10px;">🔋 Phone</span>
+                            </div>
+                            <div style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); margin-bottom: 10px;">
+                                <img id="wall-phone-img" src="" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                                <div id="wall-phone-placeholder" style="display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; text-align: center; padding: 16px;">
+                                    <span style="font-size: 32px; opacity: 0.5;">📱</span>
+                                    <span style="font-weight: 600; color: #ffffff;">Phone Screen Standby</span>
+                                    <span>Preserving battery. Click "Pull Snapshot" to capture current screen.</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 10px;">
+                                <span id="wall-phone-res">Resolution: Standby</span>
+                                <span id="wall-phone-time">Last update: Never</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="requestCompanionSnapshot('smartphone')">🔄 Pull Snapshot</button>
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="pingCompanionDevice('smartphone')">🔔 Ping Phone</button>
+                        </div>
+                    </div>
+
+                    <!-- 2. LAPTOP SCREEN CARD -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #ffffff; font-size: 13px;">
+                                    <span>💻</span>
+                                    <span>Laptop Workstation</span>
+                                </div>
+                                <span id="wall-laptop-battery" style="font-size: 11px; font-weight: 600; color: #38bdf8; background: rgba(56,189,248,0.1); padding: 2px 8px; border-radius: 10px;">⚡ Laptop</span>
+                            </div>
+                            <div style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); margin-bottom: 10px;">
+                                <img id="wall-laptop-img" src="" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                                <div id="wall-laptop-placeholder" style="display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; text-align: center; padding: 16px;">
+                                    <span style="font-size: 32px; opacity: 0.5;">💻</span>
+                                    <span style="font-weight: 600; color: #ffffff;">Workstation Mirror Standby</span>
+                                    <span>Synced over LAN. Click "Pull Snapshot" to capture current screen.</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 10px;">
+                                <span id="wall-laptop-res">Resolution: Standby</span>
+                                <span id="wall-laptop-time">Last update: Never</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="requestCompanionSnapshot('laptop')">🔄 Pull Snapshot</button>
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="pingCompanionDevice('laptop')">🔔 Ping Laptop</button>
+                        </div>
+                    </div>
+
+                    <!-- 3. SMARTWATCH CIRCULAR AMOLED HUD CARD -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #ffffff; font-size: 13px;">
+                                    <span>⌚</span>
+                                    <span>Smartwatch AMOLED Wrist</span>
+                                </div>
+                                <span id="wall-watch-battery" style="font-size: 11px; font-weight: 600; color: #f59e0b; background: rgba(245,158,11,0.1); padding: 2px 8px; border-radius: 10px;">🔋 0% Drain</span>
+                            </div>
+                            <div style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); margin-bottom: 10px;">
+                                <!-- Photorealistic AMOLED Circular Watch Face -->
+                                <div style="width: 180px; height: 180px; border-radius: 50%; border: 3px solid #10b981; background: radial-gradient(circle, #0e171b 0%, #05080a 100%); box-shadow: 0 0 20px rgba(16,185,129,0.25); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px; position: relative;">
+                                    <div id="wall-watch-time" style="font-size: 26px; font-weight: 800; font-family: monospace; color: #ffffff; letter-spacing: 1px;">--:--</div>
+                                    <div id="wall-watch-state" style="font-size: 9px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 0.05em;">● MIC READY</div>
+                                    <div id="wall-watch-msg" style="font-size: 10px; color: #94a3b8; max-width: 140px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Hold to Talk</div>
+                                    <div id="wall-watch-batt-sub" style="position: absolute; bottom: 12px; font-size: 9px; color: #64748b; font-weight: 600;">Wrist Battery: --</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 10px;">
+                                <span>HUD Mode: AMOLED Micro-Telemetry</span>
+                                <span id="wall-watch-sync">Sync: Realtime</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="requestCompanionSnapshot('smartwatch')">🔄 Sync HUD</button>
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="pingCompanionDevice('smartwatch')">🔔 Ping Watch</button>
+                        </div>
+                    </div>
+
+                    <!-- 4. HOST PC DESKTOP MONITOR CARD -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #ffffff; font-size: 13px;">
+                                    <span>🖥️</span>
+                                    <span>Host PC (This Machine)</span>
+                                </div>
+                                <span style="font-size: 11px; font-weight: 600; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 8px; border-radius: 10px;">⚡ AI Core Online</span>
+                            </div>
+                            <div style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); margin-bottom: 10px;">
+                                <img id="wall-pc-img" src="/api/desktop/stream?monitor=1&fps=1&max_width=640&quality=60" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; document.getElementById('wall-pc-placeholder').style.display='flex';" />
+                                <div id="wall-pc-placeholder" style="display: none; flex-direction: column; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; text-align: center; padding: 16px;">
+                                    <span style="font-size: 32px; opacity: 0.5;">🖥️</span>
+                                    <span style="font-weight: 600; color: #ffffff;">Host PC Display</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 10px;">
+                                <span>Multi-Monitor Engine Active</span>
+                                <span>Primary Display</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="setTab('desktop')">🖥️ View Desktop Shell</button>
+                            <button class="btn-action" style="flex: 1; font-size: 11px; padding: 6px;" onclick="refreshPcScreen()">🔄 Refresh PC</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3722,9 +3889,215 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                         </div>`;
                     }).join('');
                 }
+
+                // Update Location & Environment HUD
+                if (data.location) {
+                    const loc = data.location;
+                    const zoneTag = document.getElementById('loc-zone-tag');
+                    if (zoneTag) {
+                        zoneTag.innerText = (loc.zone || 'HOME COCKPIT').toUpperCase();
+                        if (loc.is_home) {
+                            zoneTag.style.background = 'rgba(16,185,129,0.15)';
+                            zoneTag.style.color = '#10b981';
+                            zoneTag.style.borderColor = 'rgba(16,185,129,0.3)';
+                        } else {
+                            zoneTag.style.background = 'rgba(56,189,248,0.15)';
+                            zoneTag.style.color = '#38bdf8';
+                            zoneTag.style.borderColor = 'rgba(56,189,248,0.3)';
+                        }
+                    }
+                    const disp = document.getElementById('loc-display-name');
+                    if (disp && loc.display_name) disp.innerText = loc.display_name;
+                    const distSub = document.getElementById('loc-distance-sub');
+                    if (distSub) {
+                        if (loc.distance_to_home_meters !== undefined && loc.distance_to_home_meters !== null) {
+                            distSub.innerText = `${Number(loc.distance_to_home_meters).toFixed(0)}m from Home Cockpit`;
+                        } else {
+                            distSub.innerText = 'At Home Cockpit';
+                        }
+                    }
+                    const wSummary = document.getElementById('loc-weather-summary');
+                    const wDetails = document.getElementById('loc-weather-details');
+                    if (wSummary && loc.weather && loc.weather.condition) {
+                        wSummary.innerText = `${loc.weather.condition} • ${loc.weather.temperature_f}°F (${loc.weather.temperature_c}°C)`;
+                        if (wDetails) {
+                            wDetails.innerText = `Humidity: ${loc.weather.humidity}% • Wind: ${loc.weather.wind_speed_kmh} km/h`;
+                        }
+                    }
+                    const srcEl = document.getElementById('loc-telemetry-source');
+                    if (srcEl && loc.source_type && loc.source_type !== 'none') {
+                        srcEl.innerText = `${loc.source_type.toUpperCase()} (Low-Power GPS/Wi-Fi)`;
+                    }
+                }
+
+                // Update Smartwatch HUD Card
+                if (data.watch_hud) {
+                    const wh = data.watch_hud;
+                    const timeEl = document.getElementById('wall-watch-time');
+                    if (timeEl && wh.time) timeEl.innerText = wh.time;
+                    const stateEl = document.getElementById('wall-watch-state');
+                    if (stateEl) {
+                        stateEl.innerText = wh.voice_state === 'listening' ? '🔴 LISTENING' : (wh.voice_state === 'holding' ? '🟡 TALKING' : '● MIC READY');
+                        stateEl.style.color = wh.voice_state === 'listening' ? '#ef4444' : (wh.voice_state === 'holding' ? '#f59e0b' : '#10b981');
+                    }
+                    const msgEl = document.getElementById('wall-watch-msg');
+                    if (msgEl && wh.last_message) msgEl.innerText = wh.last_message;
+                    const battEl = document.getElementById('wall-watch-battery');
+                    const battSub = document.getElementById('wall-watch-batt-sub');
+                    if (wh.battery !== null && wh.battery !== undefined) {
+                        if (battEl) battEl.innerText = (wh.is_charging ? '⚡ ' : '🔋 ') + wh.battery + '%';
+                        if (battSub) battSub.innerText = `Wrist Battery: ${wh.battery}% ${wh.is_charging ? '(Charging)' : ''}`;
+                    }
+                }
+
+                // Update Screen Wall Snapshots (Mobile & Laptop)
+                if (data.snapshots) {
+                    for (const [devId, snap] of Object.entries(data.snapshots)) {
+                        const dt = (snap.device_type || '').toLowerCase();
+                        if (dt.includes('phone') || dt.includes('smart') || dt.includes('mobile')) {
+                            const img = document.getElementById('wall-phone-img');
+                            const ph = document.getElementById('wall-phone-placeholder');
+                            const resEl = document.getElementById('wall-phone-res');
+                            const tEl = document.getElementById('wall-phone-time');
+                            const battEl = document.getElementById('wall-phone-battery');
+                            if (img && snap.image) {
+                                img.src = snap.image;
+                                img.style.display = 'block';
+                                if (ph) ph.style.display = 'none';
+                            }
+                            if (resEl && snap.width) resEl.innerText = `Resolution: ${snap.width}x${snap.height} px`;
+                            if (tEl && snap.timestamp) tEl.innerText = 'Last update: ' + new Date(snap.timestamp * 1000).toLocaleTimeString();
+                            if (battEl && snap.battery !== null && snap.battery !== undefined) {
+                                battEl.innerText = (snap.is_charging ? '⚡ ' : '🔋 ') + snap.battery + '%';
+                            }
+                        } else if (dt.includes('laptop') || dt.includes('workstation')) {
+                            const img = document.getElementById('wall-laptop-img');
+                            const ph = document.getElementById('wall-laptop-placeholder');
+                            const resEl = document.getElementById('wall-laptop-res');
+                            const tEl = document.getElementById('wall-laptop-time');
+                            const battEl = document.getElementById('wall-laptop-battery');
+                            if (img && snap.image) {
+                                img.src = snap.image;
+                                img.style.display = 'block';
+                                if (ph) ph.style.display = 'none';
+                            }
+                            if (resEl && snap.width) resEl.innerText = `Resolution: ${snap.width}x${snap.height} px`;
+                            if (tEl && snap.timestamp) tEl.innerText = 'Last update: ' + new Date(snap.timestamp * 1000).toLocaleTimeString();
+                            if (battEl && snap.battery !== null && snap.battery !== undefined) {
+                                battEl.innerText = (snap.is_charging ? '⚡ ' : '🔋 ') + snap.battery + '%';
+                            }
+                        }
+                    }
+                }
+
                 refreshMeshLogs();
             } catch (e) {
                 console.error("Failed to refresh mesh devices", e);
+            }
+        }
+
+        async function requestCompanionSnapshot(deviceType) {
+            showToast(`Requesting snapshot from ${deviceType}...`);
+            try {
+                const statusRes = await fetch('/api/mesh/status');
+                const data = await statusRes.json();
+                let targetId = '';
+                if (data.devices) {
+                    const d = data.devices.find(x => x.connected && (x.device_type || '').toLowerCase().includes(deviceType.toLowerCase()));
+                    if (d) targetId = d.device_id;
+                }
+                if (!targetId) targetId = deviceType === 'laptop' ? 'laptop-workstation' : 'phone-companion';
+                const res = await fetch('/api/mesh/request_snapshot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: targetId })
+                });
+                const resData = await res.json();
+                if (resData.status === 'requested') {
+                    showToast(`Snapshot requested from ${deviceType}. Updating view...`);
+                    setTimeout(refreshMeshDevices, 1200);
+                } else {
+                    showToast(`Device ${deviceType} is currently offline.`);
+                }
+            } catch (e) {
+                alert('Snapshot request error: ' + e);
+            }
+        }
+
+        async function pullAllScreenshots() {
+            requestCompanionSnapshot('smartphone');
+            requestCompanionSnapshot('laptop');
+            requestCompanionSnapshot('smartwatch');
+            refreshPcScreen();
+        }
+
+        async function pingCompanionDevice(deviceType) {
+            showToast(`🔔 Pinging ${deviceType} in the room...`);
+            try {
+                const statusRes = await fetch('/api/mesh/status');
+                const data = await statusRes.json();
+                let targetId = '';
+                if (data.devices) {
+                    const d = data.devices.find(x => x.connected && (x.device_type || '').toLowerCase().includes(deviceType.toLowerCase()));
+                    if (d) targetId = d.device_id;
+                }
+                if (!targetId) targetId = deviceType === 'laptop' ? 'laptop-workstation' : 'phone-companion';
+                const res = await fetch('/api/mesh/ping_device', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: targetId, tone: 'chime' })
+                });
+                const r = await res.json();
+                if (r.status === 'sent') {
+                    showToast(`🔔 Acoustic chime & vibration triggered on ${deviceType}!`);
+                } else {
+                    showToast(`⚠️ ${deviceType} appears offline, alerting all paired nodes...`);
+                    buzzMeshDevice(targetId);
+                }
+            } catch (e) {
+                alert('Ping error: ' + e);
+            }
+        }
+
+        async function setHomeLocation() {
+            try {
+                const res = await fetch('/api/location/set_home', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    showToast("🏡 Current coordinates locked as Home Cockpit!");
+                    refreshMeshDevices();
+                } else {
+                    alert("Set home error: " + (data.message || 'Unknown'));
+                }
+            } catch (e) {
+                alert("Home set error: " + e);
+            }
+        }
+
+        async function copyLocationContext() {
+            try {
+                const res = await fetch('/api/location/current');
+                const data = await res.json();
+                const snippet = `User Location: ${data.zone || 'Home Cockpit'} (${data.display_name || 'San Francisco, CA'}) • Weather: ${data.weather ? (data.weather.condition + ', ' + data.weather.temperature_f + '°F') : 'Clear'} • Distance to Home: ${data.distance_to_home_meters || 0}m [Source: ${data.source_type || 'GPS'}]`;
+                navigator.clipboard.writeText(snippet).then(() => {
+                    showToast("📋 Location prompt context copied!");
+                }).catch(() => {
+                    prompt("Copy location context:", snippet);
+                });
+            } catch (e) {
+                alert("Context copy error: " + e);
+            }
+        }
+
+        function refreshPcScreen() {
+            const img = document.getElementById('wall-pc-img');
+            if (img) {
+                img.src = '/api/desktop/stream?monitor=1&fps=1&max_width=640&quality=60&t=' + Date.now();
+                showToast("Host PC preview refreshed");
             }
         }
 

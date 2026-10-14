@@ -157,6 +157,13 @@ function handleMeshEvent(data) {
     } else if (data.type === 'photo_saved') {
         showToast(data.message);
         appendChatMessage('hermes', '📸 ' + data.message);
+    } else if (data.type === 'ping_device') {
+        showToast('🔔 PING FROM HERMES HOST PC!');
+        playAcousticChime();
+        if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 600]);
+        appendChatMessage('hermes', '🔔 Host PC pinged this device at ' + new Date().toLocaleTimeString());
+    } else if (data.type === 'request_screen_snapshot') {
+        sendCurrentScreenSnapshot();
     }
 }
 
@@ -594,6 +601,122 @@ async function askAboutMobileScreen() {
     }
 }
 
+// ── ACOUSTIC PING & DEVICE FINDER (Web Audio API Synthesizer) ─────────────
+function playAcousticChime(repeats = 5) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        for (let i = 0; i < repeats; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            const startTime = ctx.currentTime + (i * 0.35);
+            osc.frequency.setValueAtTime(880, startTime);
+            osc.frequency.exponentialRampToValueAtTime(1760, startTime + 0.20);
+            gain.gain.setValueAtTime(0.5, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.30);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.32);
+        }
+    } catch (e) {
+        console.warn('Acoustic chime error:', e);
+    }
+}
+
+// ── BATTERY-PRESERVING ON-DEMAND SCREEN SNAPSHOT ──────────────────────────
+async function sendCurrentScreenSnapshot() {
+    let frameB64 = '';
+    let w = window.innerWidth;
+    let h = window.innerHeight;
+    const videoEl = document.getElementById('mobile-screen-video');
+
+    if (mobileScreenStream && videoEl && videoEl.videoWidth > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        w = canvas.width;
+        h = canvas.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        frameB64 = canvas.toDataURL('image/jpeg', 0.65);
+    }
+
+    // If screen share not active, generate a lightweight telemetry card snapshot
+    if (!frameB64) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 700;
+        w = 400;
+        h = 700;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0a0d0e';
+        ctx.fillRect(0, 0, 400, 700);
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 24px monospace';
+        ctx.fillText('Hermes Mobile HUD', 30, 60);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '16px sans-serif';
+        ctx.fillText('Device ID: ' + deviceId, 30, 100);
+        ctx.fillText('Time: ' + new Date().toLocaleTimeString(), 30, 130);
+        const bTag = document.getElementById('battery-tag');
+        ctx.fillText('Battery: ' + (bTag ? bTag.innerText : 'Unknown'), 30, 160);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('(Tap Start Screen Share to view full live OS screen)', 30, 220);
+        frameB64 = canvas.toDataURL('image/jpeg', 0.70);
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN && frameB64) {
+        ws.send(JSON.stringify({
+            type: 'companion_screen_snapshot',
+            image: frameB64,
+            width: w,
+            height: h,
+            device_type: 'smartphone'
+        }));
+    }
+}
+
+// ── ALWAYS-ON LOW-POWER GEOLOCATION TELEMETRY ─────────────────────────────
+function initLowPowerGeolocation() {
+    if (!('geolocation' in navigator)) return;
+
+    function reportPosition(pos) {
+        if (!pos || !pos.coords) return;
+        const c = pos.coords;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'location_telemetry',
+                latitude: c.latitude,
+                longitude: c.longitude,
+                accuracy: c.accuracy || 0,
+                altitude: c.altitude || null,
+                speed: c.speed || 0,
+                heading: c.heading || 0,
+                source_type: 'smartphone'
+            }));
+        }
+    }
+
+    try {
+        navigator.geolocation.getCurrentPosition(reportPosition, () => {}, {
+            enableHighAccuracy: false,
+            maximumAge: 120000,
+            timeout: 10000
+        });
+        navigator.geolocation.watchPosition(reportPosition, () => {}, {
+            enableHighAccuracy: false,
+            maximumAge: 120000,
+            timeout: 20000
+        });
+    } catch (e) {
+        console.warn('Geolocation error:', e);
+    }
+}
+
 // Service worker registration
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/companions/smartphone/sw.js').catch(() => {});
@@ -602,4 +725,5 @@ if ('serviceWorker' in navigator) {
 window.onload = () => {
     connectPhone();
     startDesktopActivityPolling();
+    initLowPowerGeolocation();
 };

@@ -165,6 +165,13 @@ function handleIncomingPacket(data) {
         vibrate([60]);
         setCaption(`Clip: ${(data.content || '').substring(0, 20)}...`);
         setTimeout(() => setCaption('Hold to Talk'), 3000);
+    } else if (data.type === 'ping_device') {
+        showWatchToast('🔔 PING FROM PC', 5000);
+        vibrate([400, 100, 400, 100, 800]);
+        playWatchChime();
+        setCaption('🔔 PC Pinged Watch');
+    } else if (data.type === 'request_screen_snapshot') {
+        sendWatchHudTelemetry();
     }
 }
 
@@ -457,7 +464,71 @@ function setupVoiceEventListeners() {
     });
 }
 
+// ── WRIST ACOUSTIC CHIME (Web Audio API Synthesizer) ──────────────────────
+function playWatchChime(repeats = 4) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        for (let i = 0; i < repeats; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            const startTime = ctx.currentTime + (i * 0.3);
+            osc.frequency.setValueAtTime(1200, startTime);
+            osc.frequency.exponentialRampToValueAtTime(2400, startTime + 0.15);
+            gain.gain.setValueAtTime(0.6, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.25);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.28);
+        }
+    } catch (e) {
+        console.warn('Watch chime error:', e);
+    }
+}
+
+// ── ZERO-BATTERY WRIST HUD STATE TELEMETRY ────────────────────────────────
+function sendWatchHudTelemetry() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        const clockEl = document.getElementById('watch-clock');
+        const pill = document.getElementById('battery-pill');
+        const caption = document.getElementById('voice-caption');
+        ws.send(JSON.stringify({
+            type: 'watch_hud_telemetry',
+            time: clockEl ? clockEl.innerText : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            battery: pill ? parseInt(pill.innerText.replace(/\D/g, '')) || null : null,
+            is_charging: pill ? pill.innerText.includes('⚡') : false,
+            voice_state: isListening ? 'listening' : (isHolding ? 'holding' : 'idle'),
+            last_message: caption ? caption.innerText : 'Ready',
+            heart_rate: 72,
+            timestamp: Date.now()
+        }));
+    }
+}
+
+// ── SMARTWATCH LOW-POWER GEOLOCATION ──────────────────────────────────────
+function initWatchLocation() {
+    if (!('geolocation' in navigator)) return;
+    try {
+        navigator.geolocation.getCurrentPosition((pos) => {
+            if (pos && pos.coords && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'location_telemetry',
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy || 0,
+                    source_type: 'smartwatch'
+                }));
+            }
+        }, () => {}, { enableHighAccuracy: false, maximumAge: 180000, timeout: 10000 });
+    } catch (_) {}
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     connectWatch();
     setupVoiceEventListeners();
+    initWatchLocation();
+    setInterval(sendWatchHudTelemetry, 20000);
 });

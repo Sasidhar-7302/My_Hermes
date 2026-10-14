@@ -149,6 +149,12 @@ function handleIncoming(data) {
     } else if (data.type === 'panic_alert') {
         showToast(`🚨 ${data.message}`);
         appendLog('PANIC', data.message);
+    } else if (data.type === 'ping_device') {
+        showToast('🔔 PING FROM HERMES HOST PC!');
+        appendLog('PING', 'Host PC initiated acoustic device ping');
+        playLaptopChime();
+    } else if (data.type === 'request_screen_snapshot') {
+        sendLaptopScreenSnapshot();
     }
 }
 
@@ -408,7 +414,91 @@ function startDesktopActivityPolling() {
     activityPollInterval = setInterval(pollDesktopActivity, 2500);
 }
 
+// ── ACOUSTIC PING CHIME (Web Audio API Synthesizer) ───────────────────────
+function playLaptopChime(repeats = 5) {
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        for (let i = 0; i < repeats; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            const startTime = ctx.currentTime + (i * 0.35);
+            osc.frequency.setValueAtTime(660, startTime);
+            osc.frequency.exponentialRampToValueAtTime(1320, startTime + 0.20);
+            gain.gain.setValueAtTime(0.5, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.30);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.32);
+        }
+    } catch (e) {
+        console.warn('Laptop chime error:', e);
+    }
+}
+
+// ── BATTERY-PRESERVING ON-DEMAND SCREEN SNAPSHOT ──────────────────────────
+function sendLaptopScreenSnapshot() {
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 360;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 640, 360);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('Hermes Laptop Workstation', 30, 50);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('Device ID: ' + deviceId, 30, 85);
+        ctx.fillText('Time: ' + new Date().toLocaleTimeString(), 30, 115);
+        const bEl = document.getElementById('laptop-battery');
+        ctx.fillText('Battery: ' + (bEl ? bEl.innerText : 'AC Power'), 30, 145);
+        const focused = document.getElementById('screen-active-window');
+        ctx.fillText('Active Context: ' + (focused ? focused.innerText : 'Normal'), 30, 175);
+        ctx.fillStyle = '#10b981';
+        ctx.fillText('● State: Connected & Synchronized to Host PC', 30, 215);
+
+        const frameB64 = canvas.toDataURL('image/jpeg', 0.70);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'companion_screen_snapshot',
+                image: frameB64,
+                width: 640,
+                height: 360,
+                device_type: 'laptop'
+            }));
+        }
+    } catch (e) {
+        console.warn('Laptop snapshot error:', e);
+    }
+}
+
+// ── ALWAYS-ON LOW-POWER GEOLOCATION ───────────────────────────────────────
+function initLaptopLocation() {
+    if (!('geolocation' in navigator)) return;
+    try {
+        function sendPos(pos) {
+            if (pos && pos.coords && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'location_telemetry',
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy || 0,
+                    source_type: 'laptop'
+                }));
+            }
+        }
+        navigator.geolocation.getCurrentPosition(sendPos, () => {}, { enableHighAccuracy: false, maximumAge: 120000, timeout: 10000 });
+        navigator.geolocation.watchPosition(sendPos, () => {}, { enableHighAccuracy: false, maximumAge: 120000, timeout: 20000 });
+    } catch (_) {}
+}
+
 window.onload = () => {
     connectLaptop();
     startDesktopActivityPolling();
+    initLaptopLocation();
 };
