@@ -147,6 +147,11 @@ function handleIncomingPacket(data) {
         showWatchToast(data.title || 'Notification');
         vibrate(data.vibrate || [100, 50, 100]);
         displayAgentReply(data.body || data.title || '');
+    } else if (data.type === 'fast_action_executed') {
+        showWatchToast('⚡ ' + (data.tool || 'Executed'));
+        vibrate([100, 50, 100]);
+        setCaption('⚡ ' + (data.tool || 'Executed'));
+        displayAgentReply('⚡ [Fast Executed (' + (data.tool || '') + ')]: ' + JSON.stringify(data.result || {}));
     } else if (data.type === 'panic_alert') {
         showWatchToast('🚨 EMERGENCY STOP');
         vibrate([300, 100, 300, 100, 500]);
@@ -215,9 +220,14 @@ function initSpeechRecognition() {
     recognition.continuous = false;
     recognition.interimResults = true;
 
+    let lastSentPartial = '';
+    let lastPartialTime = 0;
+
     recognition.onstart = () => {
         isListening = true;
         currentTranscript = '';
+        lastSentPartial = '';
+        lastPartialTime = 0;
         updateVoiceVisuals(true);
         setCaption('Listening...', true);
     };
@@ -230,6 +240,20 @@ function initSpeechRecognition() {
         currentTranscript = transcript.trim();
         if (currentTranscript) {
             setCaption(currentTranscript, true);
+
+            // Stream partial transcript to Laya System-1 in real-time
+            const now = Date.now();
+            if (ws && ws.readyState === WebSocket.OPEN && currentTranscript.length >= 3) {
+                if (currentTranscript !== lastSentPartial && (now - lastPartialTime >= 140)) {
+                    lastSentPartial = currentTranscript;
+                    lastPartialTime = now;
+                    ws.send(JSON.stringify({
+                        type: 'voice_partial',
+                        transcript: currentTranscript,
+                        timestamp: now
+                    }));
+                }
+            }
         }
     };
 

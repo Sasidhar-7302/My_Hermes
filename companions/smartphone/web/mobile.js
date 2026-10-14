@@ -144,6 +144,10 @@ function handleMeshEvent(data) {
     } else if (data.type === 'notification') {
         showToast(data.title + ': ' + data.body);
         if (navigator.vibrate && data.vibrate) navigator.vibrate(data.vibrate);
+    } else if (data.type === 'fast_action_executed') {
+        showToast('⚡ Fast Action: ' + (data.tool || 'Executed'));
+        appendChatMessage('hermes', '⚡ [System 1 Executed (' + (data.tool || '') + ')]: ' + JSON.stringify(data.result || {}));
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     } else if (data.type === 'panic_alert') {
         showToast('🚨 ' + data.message);
         if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
@@ -242,22 +246,49 @@ function toggleVoicePrompt() {
     if (!recognition) {
         recognition = new SpeechRec();
         recognition.continuous = false;
-        recognition.interimResults = false;
+        recognition.interimResults = true;
+
+        let lastSentPartial = '';
+        let lastPartialTime = 0;
+
         recognition.onstart = () => {
             isRecording = true;
+            lastSentPartial = '';
+            lastPartialTime = 0;
             document.getElementById('mic-btn').style.background = 'rgba(239, 68, 68, 0.2)';
             document.getElementById('mic-btn').style.borderColor = '#ef4444';
             showToast('🎙️ Listening...');
         };
         recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            document.getElementById('chat-input').value = transcript;
-            sendPrompt();
+            let transcript = '';
+            for (let i = 0; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            const clean = transcript.trim();
+            if (clean) {
+                document.getElementById('chat-input').value = clean;
+                const now = Date.now();
+                if (ws && ws.readyState === WebSocket.OPEN && clean.length >= 3) {
+                    if (clean !== lastSentPartial && (now - lastPartialTime >= 140)) {
+                        lastSentPartial = clean;
+                        lastPartialTime = now;
+                        ws.send(JSON.stringify({
+                            type: 'voice_partial',
+                            transcript: clean,
+                            timestamp: now
+                        }));
+                    }
+                }
+            }
         };
         recognition.onend = () => {
             isRecording = false;
             document.getElementById('mic-btn').style.background = '';
             document.getElementById('mic-btn').style.borderColor = '';
+            const finalVal = document.getElementById('chat-input').value.trim();
+            if (finalVal) {
+                sendPrompt();
+            }
         };
     }
 
