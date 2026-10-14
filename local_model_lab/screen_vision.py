@@ -162,13 +162,20 @@ class ScreenVision:
         except Exception:
             return []
 
-    def describe_screen(self, prompt: str = "Describe what is currently visible on my screen in 2-3 concise sentences.") -> str:
-        """Analyzes the current screen and returns a natural language summary."""
-        img, img_bytes, (orig_w, orig_h) = capture_screen()
-        if not img or not img_bytes:
-            return "Failed to capture desktop screenshot (PIL ImageGrab unavailable)."
+    def describe_screen(
+        self,
+        prompt: str = "Describe what is currently visible on my screen in 2-3 concise sentences.",
+        image_bytes: Optional[bytes] = None
+    ) -> str:
+        """Analyzes the screen (or supplied image bytes) and returns a natural language summary."""
+        if image_bytes is not None:
+            raw_bytes = image_bytes
+        else:
+            img, raw_bytes, (orig_w, orig_h) = capture_screen()
+            if not img or not raw_bytes:
+                return "Failed to capture desktop screenshot (PIL ImageGrab unavailable)."
 
-        b64_img = base64.b64encode(img_bytes).decode("utf-8")
+        b64_img = base64.b64encode(raw_bytes).decode("utf-8")
 
         # 1. Try Local Ollama Vision
         vision_models = self.get_installed_ollama_vision_models()

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#070a0d">
+    <meta name="theme-color" content="#06090c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Hermes Smartphone Companion</title>
@@ -14,126 +14,186 @@
     <div id="toast-banner">Hermes Connected</div>
 
     <div class="mobile-container">
-        <!-- Header -->
+        <!-- Top Sleek Header -->
         <div class="app-header">
             <div class="brand-badge">
                 <div class="pulse-orb" id="connection-orb"></div>
                 <div>
-                    <div style="font-size: 14px; font-weight: 700; color: #ffffff;">HERMES PHONE</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">Omni-Mesh Mobile Node</div>
+                    <div style="font-size: 13px; font-weight: 800; color: #ffffff; letter-spacing: 0.04em;">HERMES MOBILE</div>
+                    <div style="font-size: 10px; color: var(--accent-emerald);">● HOST 10.0.0.60 ONLINE</div>
                 </div>
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <button id="pwa-install-btn" class="action-btn" style="display: none; padding: 4px 8px; font-size: 11px; width: auto; height: auto;" onclick="promptInstallApp()">
-                    ⬇️ Install App
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <button id="pwa-install-btn" class="action-btn" style="display: none; padding: 4px 8px; font-size: 10px;" onclick="promptInstallApp()">
+                    ⬇️ Install
                 </button>
-                <div id="battery-tag" style="font-size: 11px; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
+                <div id="battery-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
                     🔋 --%
                 </div>
-            </div>
-        </div>
-
-        <!-- Unified Clipboard Card -->
-        <div class="card">
-            <div class="card-title">
-                📋 Cross-Device Unified Clipboard
-            </div>
-            <textarea id="clip-text" class="text-input" style="height: 65px; resize: none;" placeholder="Type or paste to sync with PC clipboard..."></textarea>
-            <div class="btn-grid">
-                <button class="action-btn" onclick="pushClipboard()">
-                    <span>⬆️ Push to PC</span>
-                </button>
-                <button class="action-btn" onclick="pullClipboard()">
-                    <span>⬇️ Pull from PC</span>
+                <button class="action-btn danger" style="padding: 4px 8px; font-size: 10px; border-radius: 6px;" onclick="triggerPanicStop()" title="Emergency Stop">
+                    🚨 Stop
                 </button>
             </div>
         </div>
 
-        <!-- Live Desktop Screen Mirror ("Watch Hermes Work" - Muse Style) -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <div class="card-title">
-                    📺 Watch Hermes Work (Live Screen)
-                </div>
-                <div style="display: flex; gap: 6px;">
-                    <button class="screen-btn" id="stream-toggle-btn" onclick="toggleScreenStream()">⏸️ Pause</button>
-                    <select id="screen-monitor-select" class="screen-btn" onchange="changeMonitor(this.value)">
-                        <option value="2" selected>Mon 2 (Primary)</option>
-                        <option value="1">Mon 1 (Secondary)</option>
-                        <option value="all">Dual Monitors</option>
-                    </select>
-                </div>
-            </div>
-            <div class="screen-wrapper" id="screen-wrapper" onclick="handleScreenClick(event)">
-                <img id="desktop-stream-img" class="screen-stream-img" src="/api/desktop/stream?monitor=2&fps=8&max_width=960&quality=60" alt="Live Desktop Feed" />
-                <div class="screen-overlay-badge" id="screen-active-window">
-                    Focused: Desktop
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted);">
-                <span>Tap screen to click on PC</span>
-                <span id="screen-hud-status" style="color: var(--accent-emerald); font-weight: 600;">● STREAMING</span>
-            </div>
-            <!-- Quick Desktop Remote Controls -->
-            <div class="screen-controls">
-                <button class="screen-btn" onclick="sendRemoteKey('enter')">⏎ Enter</button>
-                <button class="screen-btn" onclick="sendRemoteKey('esc')">Esc</button>
-                <button class="screen-btn" onclick="sendRemoteKey('win')">⊞ Win</button>
-                <button class="screen-btn" onclick="sendRemoteKey('tab')">⇥ Tab</button>
-                <button class="screen-btn" onclick="sendRemoteKey('volume_up')">🔊 Vol+</button>
-                <button class="screen-btn" onclick="sendRemoteKey('volume_down')">🔉 Vol-</button>
-                <button class="screen-btn" onclick="sendRemoteKey('mute')">🔇 Mute</button>
-            </div>
-        </div>
-
-        <!-- 24/7 Power & Remote Wake-on-LAN -->
-        <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div class="card-title">
-                    ⚡ Host Power & Wake-on-LAN
-                </div>
-                <span id="power-status-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 3px 8px; border-radius: 4px;">
-                    AWAKE 24/7
-                </span>
-            </div>
-            <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">If host PC is sleeping or off, send a Wake-on-LAN magic packet over Wi-Fi to wake it up instantly:</p>
-            <button class="action-btn" style="background: rgba(16, 185, 129, 0.2); border-color: var(--accent-emerald); color: #ffffff;" onclick="triggerPhoneWake()">
-                <span>⚡ Wake Hermes PC Now</span>
+        <!-- Sleek Segmented Tab Selector -->
+        <div class="tab-nav">
+            <button class="tab-btn active" id="tab-btn-assistant" onclick="switchTab('assistant')">
+                <span class="tab-icon">💬</span>
+                <span>Voice</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-pc-screen" onclick="switchTab('pc-screen')">
+                <span class="tab-icon">📺</span>
+                <span>PC Screen</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-phone-screen" onclick="switchTab('phone-screen')">
+                <span class="tab-icon">📱</span>
+                <span>Phone Screen</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-power-hub" onclick="switchTab('power-hub')">
+                <span class="tab-icon">⚡</span>
+                <span>Control</span>
             </button>
         </div>
 
-        <!-- Camera Vision & Voice Card -->
-        <div class="card">
-            <div class="card-title">
-                📸 Sensors & Vision Bridge
-            </div>
-            <div class="btn-grid">
-                <label class="action-btn" style="cursor: pointer;">
-                    <input type="file" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this)">
-                    <span>📷 Snap for Vision</span>
-                </label>
-                <button class="action-btn" id="mic-btn" onclick="toggleVoicePrompt()">
-                    <span>🎙️ Push to Talk</span>
-                </button>
-            </div>
-            <button class="action-btn danger" onclick="triggerPanicStop()">
-                <span>🚨 Emergency Panic Stop</span>
-            </button>
-        </div>
-
-        <!-- Live Agent Chat Card -->
-        <div class="card" style="flex: 1;">
-            <div class="card-title">
-                ⚡ Hermes Dispatch Stream
-            </div>
-            <div class="chat-stream" id="chat-stream">
-                <div class="msg-bubble hermes">
-                    Connected to Hermes Core. You can send prompts, push photos, or sync your clipboard seamlessly.
+        <!-- TAB 1: VOICE & DISPATCH (Clean & Minimalist) -->
+        <div class="tab-panel active" id="panel-assistant">
+            <!-- Voice Hero Core -->
+            <div class="voice-hero-card">
+                <div class="voice-core-ring" id="mic-btn" onclick="toggleVoicePrompt()" title="Tap to talk">
+                    🎙️
+                </div>
+                <div>
+                    <div id="voice-status-text" style="font-size: 14px; font-weight: 700; color: #ffffff;">Tap to Speak with Hermes</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Sub-30ms Laya System-1 Decision Core</div>
+                </div>
+                <!-- Quick Suggestion Chips -->
+                <div class="quick-chip-row">
+                    <button class="quick-chip" onclick="askAboutMobileScreen()">👀 What's on my phone screen?</button>
+                    <button class="quick-chip" onclick="switchTab('pc-screen')">📺 Watch Hermes Work on PC</button>
+                    <button class="quick-chip" onclick="pullClipboard()">📋 Sync Clipboard</button>
                 </div>
             </div>
-            <div class="input-bar">
-                <input type="text" id="chat-input" class="text-input" placeholder="Ask Hermes or trigger action..." onkeydown="if(event.key==='Enter') sendPrompt()">
-                <button class="action-btn" style="width: 50px;" onclick="sendPrompt()">➤</button>
+
+            <!-- Live Chat Stream -->
+            <div class="card" style="flex: 1; padding: 12px;">
+                <div class="chat-stream" id="chat-stream" style="height: 220px;">
+                    <div class="msg-bubble hermes">
+                        Connected to Hermes Host PC. Ask questions, dictate tasks, share your screen, or control desktop applications.
+                    </div>
+                </div>
+                <div class="input-bar" style="margin-top: 10px;">
+                    <input type="text" id="chat-input" class="text-input" placeholder="Type or say a prompt..." onkeydown="if(event.key==='Enter') sendPrompt()">
+                    <button class="action-btn" style="width: 46px; border-radius: 8px;" onclick="sendPrompt()">➤</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: WATCH HERMES WORK (Live Desktop Mirror) -->
+        <div class="tab-panel" id="panel-pc-screen">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <div class="card-title">
+                        📺 Watch Hermes Work (PC Screen)
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="screen-btn" id="stream-toggle-btn" onclick="toggleScreenStream()">⏸️ Pause</button>
+                        <select id="screen-monitor-select" class="screen-btn" onchange="changeMonitor(this.value)">
+                            <option value="2" selected>Mon 2 (Primary)</option>
+                            <option value="1">Mon 1 (Secondary)</option>
+                            <option value="all">Dual Monitors</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="screen-wrapper" id="screen-wrapper" onclick="handleScreenClick(event)">
+                    <img id="desktop-stream-img" class="screen-stream-img" src="/api/desktop/stream?monitor=2&fps=8&max_width=960&quality=60" alt="Live Desktop Feed" />
+                    <div class="screen-overlay-badge" id="screen-active-window">
+                        Focused: Desktop
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted);">
+                    <span>Tap anywhere on the mirror to click PC</span>
+                    <span id="screen-hud-status" style="color: var(--accent-emerald); font-weight: 600;">● STREAMING</span>
+                </div>
+
+                <!-- Quick Remote Keys Bar -->
+                <div class="screen-controls">
+                    <button class="screen-btn" onclick="sendRemoteKey('enter')">⏎ Enter</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('esc')">Esc</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('win')">⊞ Win</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('tab')">⇥ Tab</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('volume_up')">🔊 Vol+</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('volume_down')">🔉 Vol-</button>
+                    <button class="screen-btn" onclick="sendRemoteKey('mute')">🔇 Mute</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: PHONE SCREEN & VISION SHARING -->
+        <div class="tab-panel" id="panel-phone-screen">
+            <div class="screen-share-hero">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 14px; font-weight: 700; color: #ffffff;">📱 Share Mobile Screen</div>
+                    <span id="mobile-share-status" style="font-size: 10px; font-weight: 700; color: var(--text-muted); background: rgba(0,0,0,0.4); padding: 3px 8px; border-radius: 4px;">OFFLINE</span>
+                </div>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                    Allows Hermes to see what is on your phone screen in real-time. Ask: <em>"Hey Hermes, what's on my screen?"</em> or summarize reading material.
+                </p>
+
+                <!-- Hidden video capture element -->
+                <video id="mobile-screen-video" autoplay playsinline muted style="display: none;"></video>
+                <input type="file" id="mobile-screen-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handlePhotoUpload(this)">
+
+                <div class="btn-grid">
+                    <button class="action-btn" id="mobile-share-btn" style="background: rgba(56, 189, 248, 0.15); border-color: var(--accent-blue); color: #ffffff;" onclick="toggleMobileScreenShare()">
+                        <span>📱 Start Screen Share</span>
+                    </button>
+                    <button class="action-btn" style="background: rgba(16, 185, 129, 0.15); border-color: var(--accent-emerald); color: #ffffff;" onclick="askAboutMobileScreen()">
+                        <span>👀 What's On My Screen?</span>
+                    </button>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <button class="action-btn" style="flex: 1;" onclick="document.getElementById('mobile-screen-file-input').click()">
+                        <span>📷 Snap Camera / Photo</span>
+                    </button>
+                    <button class="action-btn" style="flex: 1;" onclick="toggleVoicePrompt()">
+                        <span>🎙️ Voice Question</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: CONTROL & 24/7 POWER HUB -->
+        <div class="tab-panel" id="panel-power-hub">
+            <!-- 24/7 Host Power & Wake-on-LAN -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="card-title">⚡ Host Power & Wake-on-LAN</div>
+                    <span id="power-status-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 3px 8px; border-radius: 4px;">AWAKE 24/7</span>
+                </div>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                    If host PC (10.0.0.60) is sleeping or powered down, broadcast a Wake-on-LAN magic packet over Wi-Fi:
+                </p>
+                <button class="action-btn" style="background: rgba(16, 185, 129, 0.2); border-color: var(--accent-emerald); color: #ffffff; padding: 14px;" onclick="triggerPhoneWake()">
+                    <span>⚡ Wake Hermes PC Now</span>
+                </button>
+            </div>
+
+            <!-- Unified Cross-Device Clipboard -->
+            <div class="card">
+                <div class="card-title">📋 Cross-Device Clipboard</div>
+                <textarea id="clip-text" class="text-input" style="height: 65px; resize: none;" placeholder="Type or paste to sync with PC clipboard..."></textarea>
+                <div class="btn-grid">
+                    <button class="action-btn" onclick="pushClipboard()">
+                        <span>⬆️ Push to PC</span>
+                    </button>
+                    <button class="action-btn" onclick="pullClipboard()">
+                        <span>⬇️ Pull from PC</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

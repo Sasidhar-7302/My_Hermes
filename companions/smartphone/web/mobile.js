@@ -173,9 +173,15 @@ function sendPrompt() {
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
-    appendChatMessage('user', text);
     input.value = '';
 
+    const lower = text.toLowerCase();
+    if (lower.includes('what is on my screen') || lower.includes("what's on my screen") || lower.includes('on my mobile screen') || lower.includes('on my phone screen') || lower.includes('read my screen')) {
+        askAboutMobileScreen();
+        return;
+    }
+
+    appendChatMessage('user', text);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             type: 'voice_prompt',
@@ -470,6 +476,122 @@ function startDesktopActivityPolling() {
     if (activityPollInterval) clearInterval(activityPollInterval);
     pollDesktopActivity();
     activityPollInterval = setInterval(pollDesktopActivity, 2500);
+}
+
+// ── TAB NAVIGATION ────────────────────────────────────────────────────────────
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+    const targetBtn = document.getElementById(`tab-btn-${tabId}`);
+    const targetPanel = document.getElementById(`panel-${tabId}`);
+    if (targetBtn) targetBtn.classList.add('active');
+    if (targetPanel) targetPanel.classList.add('active');
+    if (navigator.vibrate) navigator.vibrate([20]);
+}
+
+// ── REVERSE MOBILE SCREEN SHARING ("WHAT IS ON MY SCREEN?") ───────────────────
+let mobileScreenStream = null;
+
+async function toggleMobileScreenShare() {
+    const statusEl = document.getElementById('mobile-share-status');
+    const videoEl = document.getElementById('mobile-screen-video');
+    const btn = document.getElementById('mobile-share-btn');
+    if (mobileScreenStream) {
+        mobileScreenStream.getTracks().forEach(t => t.stop());
+        mobileScreenStream = null;
+        if (statusEl) {
+            statusEl.innerText = 'OFFLINE';
+            statusEl.style.color = 'var(--text-muted)';
+        }
+        if (btn) btn.innerHTML = '<span>📱 Start Screen Share</span>';
+        showToast('Screen sharing stopped');
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showToast('⚠️ Screen sharing not supported in this browser. Use Camera Snap.');
+        return;
+    }
+    try {
+        mobileScreenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: 'always' },
+            audio: false
+        });
+        if (videoEl) {
+            videoEl.srcObject = mobileScreenStream;
+            videoEl.play();
+        }
+        if (statusEl) {
+            statusEl.innerText = 'SHARING ACTIVE';
+            statusEl.style.color = 'var(--accent-emerald)';
+        }
+        if (btn) btn.innerHTML = '<span>⏹️ Stop Sharing</span>';
+        showToast('📱 Phone screen sharing active! Hermes can see your screen.');
+        mobileScreenStream.getVideoTracks()[0].onended = () => {
+            mobileScreenStream = null;
+            if (statusEl) {
+                statusEl.innerText = 'OFFLINE';
+                statusEl.style.color = 'var(--text-muted)';
+            }
+            if (btn) btn.innerHTML = '<span>📱 Start Screen Share</span>';
+        };
+    } catch (err) {
+        console.warn('Screen share error:', err);
+        showToast('Screen capture permission was not granted');
+    }
+}
+
+async function askAboutMobileScreen() {
+    showToast('Capturing screen for Hermes Vision...');
+    let frameB64 = '';
+    const videoEl = document.getElementById('mobile-screen-video');
+    if (mobileScreenStream && videoEl && videoEl.videoWidth > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        frameB64 = canvas.toDataURL('image/jpeg', 0.85);
+    }
+
+    if (!frameB64) {
+        showToast('Starting screen capture...');
+        await toggleMobileScreenShare();
+        if (!mobileScreenStream) {
+            const fileInp = document.getElementById('mobile-screen-file-input');
+            if (fileInp) fileInp.click();
+            return;
+        }
+        await new Promise(r => setTimeout(r, 600));
+        return askAboutMobileScreen();
+    }
+
+    appendChatMessage('user', '👀 What is on my mobile screen?');
+    switchTab('assistant');
+    try {
+        const res = await fetch('/api/companion/screen_vision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image: frameB64,
+                prompt: 'What is on my mobile screen? Describe the app, content, and any text visible.',
+                device_id: deviceId
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            appendChatMessage('hermes', data.analysis);
+            if ('speechSynthesis' in window) {
+                const clean = (data.analysis || '').replace(/[*#`_]/g, '').substring(0, 150);
+                const u = new SpeechSynthesisUtterance(clean);
+                window.speechSynthesis.speak(u);
+            }
+        } else {
+            appendChatMessage('hermes', 'Could not inspect screen: ' + (data.message || 'unknown error'));
+        }
+    } catch (e) {
+        appendChatMessage('hermes', 'Vision processing error: ' + e.message);
+    }
 }
 
 // Service worker registration

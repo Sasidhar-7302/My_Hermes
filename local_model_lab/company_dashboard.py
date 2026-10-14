@@ -886,6 +886,52 @@ async def api_desktop_remote_input(request: Request):
         return JSONResponse(content={"status": "error", "message": str(exc)}, status_code=500)
 
 
+@app.post("/api/companion/screen_vision")
+async def api_companion_screen_vision(request: Request):
+    """
+    Receives mobile or companion screen frame / screenshot, saves it,
+    and analyzes what is on the screen for the user.
+    """
+    try:
+        data = await request.json()
+        image_b64 = data.get("image") or data.get("photo_data") or ""
+        prompt = data.get("prompt") or "What is on my mobile screen? Analyze and summarize."
+        device_id = data.get("device_id", "companion-mobile")
+
+        if not image_b64:
+            return JSONResponse(content={"status": "error", "message": "No image data provided"}, status_code=400)
+
+        import base64, uuid
+        from pathlib import Path
+        raw_b64 = image_b64.split(",")[-1]
+        img_bytes = base64.b64decode(raw_b64)
+        out_dir = Path("local_model_lab/outputs")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"mobile_screen_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
+        target_path = out_dir / fname
+        target_path.write_bytes(img_bytes)
+
+        analysis = f"Mobile screen snapshot captured ({len(img_bytes) // 1024} KB)."
+        try:
+            from local_model_lab.screen_vision import get_screen_vision
+            sv = get_screen_vision()
+            res = sv.describe_screen(prompt=prompt, image_bytes=img_bytes)
+            if res:
+                analysis = res
+        except Exception as e:
+            logger.debug(f"Screen vision describe error: {e}")
+
+        return JSONResponse(content={
+            "status": "success",
+            "filename": fname,
+            "size_kb": len(img_bytes) // 1024,
+            "analysis": analysis,
+            "prompt": prompt,
+        })
+    except Exception as exc:
+        return JSONResponse(content={"status": "error", "message": str(exc)}, status_code=500)
+
+
 # ── HERMES 24/7 POWER & WAKE-ON-LAN APIS ──────────────────────────────────────
 
 @app.get("/api/power/wol_info")

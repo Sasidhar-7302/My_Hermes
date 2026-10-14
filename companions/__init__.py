@@ -172,6 +172,29 @@ def register_companion_routes(app: FastAPI):
             headers={"Content-Disposition": f'attachment; filename="{fname}"'}
         )
 
+    @app.get("/api/download/catalog")
+    async def download_feature_catalog():
+        from pathlib import Path
+        candidates = [
+            _COMPANIONS_DIR.parent / "Hermes_Complete_Feature_and_Test_Catalog.xlsx",
+            _COMPANIONS_DIR.parent.parent / "Hermes_Complete_Feature_and_Test_Catalog.xlsx",
+            Path("Hermes_Complete_Feature_and_Test_Catalog.xlsx"),
+        ]
+        target = None
+        for c in candidates:
+            if c.exists():
+                target = c
+                break
+        if target:
+            with open(target, "rb") as f:
+                content = f.read()
+            return Response(
+                content=content,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": 'attachment; filename="Hermes_Complete_Feature_and_Test_Catalog.xlsx"'}
+            )
+        return JSONResponse(content={"error": "Catalog file not found"}, status_code=404)
+
     # ── COMPANION LOGS & AUTH ADMIN APIS ────────────────────────────────────
     @app.get("/api/mesh/logs")
     async def get_mesh_logs(limit: int = 50, level: Optional[str] = None):

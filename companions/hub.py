@@ -451,10 +451,10 @@ class OmniMeshHub:
                 except Exception as exc:
                     logger.debug(f"Streaming voice evaluation error: {exc}")
 
-        # 6. Camera Photo Captured (Phone -> Vision Agent)
-        elif msg_type == "camera_photo":
-            photo_b64 = data.get("photo_data", "")
-            prompt_text = data.get("prompt", "Analyze camera photo from companion")
+        # 6. Camera Photo or Mobile Screen Snap (Phone -> Vision Agent)
+        elif msg_type in ("camera_photo", "mobile_screen_snap"):
+            photo_b64 = data.get("photo_data") or data.get("image") or ""
+            prompt_text = data.get("prompt") or ("Analyze what is currently visible on my mobile phone screen." if msg_type == "mobile_screen_snap" else "Analyze camera photo from companion")
             if photo_b64:
                 asyncio.create_task(self._process_camera_photo(device_id, photo_b64, prompt_text))
 

@@ -276,6 +276,7 @@ def render_connect_hub_html(
                 <div class="pill">📶 Wi-Fi MAC: {primary_mac}</div>
                 <div class="pill">⚡ 24/7 Keep-Alive: ACTIVE</div>
                 <div class="pill">🔑 Pair Session: {pairing_code[:12]}...</div>
+                <a href="/api/download/catalog" class="pill" style="text-decoration: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); font-weight: 700;" download>📊 Download Feature & Test Catalog (.xlsx)</a>
             </div>
         </div>
 
