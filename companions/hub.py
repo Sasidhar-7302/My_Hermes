@@ -431,6 +431,26 @@ class OmniMeshHub:
                 )
                 asyncio.create_task(self._dispatch_prompt(device_id, dev_type, dev_name, prompt))
 
+        # 5b. Streaming Realtime Voice / Typing Transcript (Jev / Laya System-1)
+        elif msg_type in ("voice_partial", "stream_partial", "typing_partial"):
+            partial = str(data.get("transcript") or data.get("text", "")).strip()
+            if partial:
+                try:
+                    from local_model_lab.laya_real_bridge import evaluate_streaming_transcript
+                    eval_res = evaluate_streaming_transcript(partial, session_id=device_id)
+                    if eval_res.get("executed"):
+                        await self.send_to_device(device_id, {
+                            "type": "fast_action_executed",
+                            "action": eval_res.get("action"),
+                            "tool": eval_res.get("tool"),
+                            "result": eval_res.get("result"),
+                            "confidence": eval_res.get("confidence", 1.0),
+                            "transcript": partial,
+                            "timestamp": time.time(),
+                        })
+                except Exception as exc:
+                    logger.debug(f"Streaming voice evaluation error: {exc}")
+
         # 6. Camera Photo Captured (Phone -> Vision Agent)
         elif msg_type == "camera_photo":
             photo_b64 = data.get("photo_data", "")
@@ -440,6 +460,18 @@ class OmniMeshHub:
 
     async def _dispatch_prompt(self, device_id: str, device_type: str, device_name: str, prompt: str):
         """Dispatches companion prompt into Hermes Gateway or company dispatcher."""
+        # Fast System 1 Gate: Check if deterministic tool can execute immediately
+        try:
+            from local_model_lab.laya_real_bridge import evaluate_streaming_transcript
+            fast_res = evaluate_streaming_transcript(prompt, session_id=device_id, fire_threshold=0.80)
+            if fast_res.get("executed"):
+                result_content = fast_res.get("result", {})
+                msg = result_content.get("message") or result_content.get("result") or str(result_content)
+                await self.send_agent_reply(device_id, f"⚡ [System 1 Executed ({fast_res.get('tool')})]: {msg}", prompt)
+                return
+        except Exception as exc:
+            logger.debug(f"System 1 bypass error: {exc}")
+
         # Check if gateway listener is hooked
         if self._gateway_listener:
             try:

@@ -35,6 +35,18 @@ async def default_channel_dispatcher(prompt: str, channel: str = "web", user_id:
         # Sanitize prompt before dispatch
         clean_prompt = mask_sensitive_text(prompt)
 
+        # 0. System 1 Fast Decision Gate (Laya CUDA ~30ms)
+        try:
+            from local_model_lab.laya_real_bridge import evaluate_streaming_transcript
+            fast_res = evaluate_streaming_transcript(clean_prompt, session_id=f"chan_{channel}_{user_id}", fire_threshold=0.82)
+            if fast_res.get("executed"):
+                res_content = fast_res.get("result", {})
+                msg = res_content.get("message") or res_content.get("result") or str(res_content)
+                log_task("SYSTEM_1_FAST", clean_prompt, msg, 30, f"laya_{fast_res.get('tool')}")
+                return f"⚡ [Laya System 1]: {msg}"
+        except Exception as e:
+            logger.debug(f"System 1 fast bypass skipped: {e}")
+
         # Route to appropriate role
         route_res = route_request(clean_prompt)
         role = route_res.get("domain", "CEO") if isinstance(route_res, dict) else str(route_res)
