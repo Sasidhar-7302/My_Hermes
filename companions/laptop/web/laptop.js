@@ -297,13 +297,19 @@ async function handleScreenClick(event) {
     try {
         const res = await fetch('/api/desktop/remote_input', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Hermes-Token': authToken,
+                'X-Hermes-Device-Id': deviceId
+            },
             body: JSON.stringify({
                 type: 'click',
                 x: normX,
                 y: normY,
                 button: 'left',
-                monitor: currentMonitor
+                monitor: currentMonitor,
+                token: authToken,
+                device_id: deviceId
             })
         });
         const data = await res.json();
@@ -319,10 +325,16 @@ async function sendRemoteKey(keyName) {
     try {
         const res = await fetch('/api/desktop/remote_input', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Hermes-Token': authToken,
+                'X-Hermes-Device-Id': deviceId
+            },
             body: JSON.stringify({
                 type: 'key',
-                key: keyName
+                key: keyName,
+                token: authToken,
+                device_id: deviceId
             })
         });
         const data = await res.json();

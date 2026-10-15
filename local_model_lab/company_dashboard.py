@@ -860,8 +860,33 @@ async def api_desktop_live_activity():
 @app.post("/api/desktop/remote_input")
 async def api_desktop_remote_input(request: Request):
     """Translates companion touch/clicks and keys into Windows inputs."""
+    client_ip = request.client.host if request.client else "127.0.0.1"
     try:
         data = await request.json()
+
+        # Security Gate: LAN requests require token authentication from a paired device
+        if client_ip not in ("127.0.0.1", "::1", "localhost", "testclient"):
+            token = request.headers.get("X-Hermes-Token") or str(data.get("token", ""))
+            dev_id = request.headers.get("X-Hermes-Device-Id") or str(data.get("device_id", ""))
+            try:
+                from companions.auth import get_pairing_manager
+                pm = get_pairing_manager()
+                if not (token and dev_id and pm.verify_device_token(dev_id, token)):
+                    from companions.logger import log_companion_event
+                    log_companion_event(
+                        "SECURITY_ALERT",
+                        f"Blocked unauthorized remote input from LAN IP {client_ip} (device: {dev_id or 'none'})",
+                        level="WARNING",
+                        device_id=dev_id or "unauthorized",
+                    )
+                    return JSONResponse(
+                        content={"status": "error", "message": "Unauthorized: Remote desktop input requires a paired companion token."},
+                        status_code=401,
+                    )
+            except Exception as auth_err:
+                logger.debug(f"Auth check error: {auth_err}")
+                return JSONResponse(content={"status": "error", "message": "Authentication service error"}, status_code=500)
+
         inp_type = str(data.get("type", "click")).lower()
         if inp_type in ("click", "tap"):
             from local_model_lab.desktop_streamer import inject_remote_mouse_click
