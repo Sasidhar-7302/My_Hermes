@@ -6,9 +6,9 @@ let ws = null;
 let deviceId = localStorage.getItem('hermes_phone_id') || ('phone-' + Math.random().toString(36).substring(2, 9));
 localStorage.setItem('hermes_phone_id', deviceId);
 
-// Pairing & Authentication token management
+// Pairing & Authentication token management (with server-injected auto-pair fallback)
 const urlParams = new URLSearchParams(window.location.search);
-const pairParam = urlParams.get('pair') || urlParams.get('pairing_code');
+const pairParam = urlParams.get('pair') || urlParams.get('pairing_code') || window.__HERMES_AUTO_PAIR__ || '';
 const tokenParam = urlParams.get('token');
 if (tokenParam) {
     localStorage.setItem('hermes_phone_token', tokenParam);
@@ -18,6 +18,29 @@ let authToken = localStorage.getItem('hermes_phone_token') || tokenParam || '';
 let isRecording = false;
 let recognition = null;
 let deferredInstallPrompt = null;
+let wakeLockSentinel = null;
+let lastBatteryLevel = null;
+let lastBatteryCharging = false;
+
+// Screen WakeLock to keep connection & voice HUD active while app is open
+async function requestScreenWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLockSentinel = await navigator.wakeLock.request('screen');
+        } catch (_) {}
+    }
+}
+requestScreenWakeLock();
+
+// Hide Install button if already running as Standalone Native App / WebAPK
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    window.addEventListener('DOMContentLoaded', () => {
+        const installBtn = document.getElementById('pwa-install-btn');
+        const fsBtn = document.getElementById('fullscreen-app-btn');
+        if (installBtn) installBtn.style.display = 'none';
+        if (fsBtn) fsBtn.style.display = 'none';
+    });
+}
 
 // PWA Install prompt listener
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -29,6 +52,49 @@ window.addEventListener('beforeinstallprompt', (e) => {
     }
 });
 
+function openInstallModal() {
+    const m = document.getElementById('install-app-modal');
+    if (m) m.style.display = 'flex';
+}
+
+function closeInstallModal() {
+    const m = document.getElementById('install-app-modal');
+    if (m) m.style.display = 'none';
+}
+
+function toggleNativeFullscreen() {
+    requestScreenWakeLock();
+    const docEl = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+        if (req) {
+            req.call(docEl, { navigationUI: 'hide' }).then(() => {
+                showToast('⛶ Full-Screen App Mode Active');
+            }).catch(() => {
+                openInstallModal();
+            });
+        } else {
+            openInstallModal();
+        }
+    } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+    }
+}
+
+function copyOriginFlagHelper() {
+    const originUrl = window.location.origin;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(originUrl).then(() => {
+            showToast(`Copied ${originUrl}! Paste in chrome://flags/#unsafely-treat-insecure-origin-as-secure`);
+        }).catch(() => {
+            prompt('Copy this URL and paste into chrome://flags/#unsafely-treat-insecure-origin-as-secure:', originUrl);
+        });
+    } else {
+        prompt('Copy this URL and paste into chrome://flags/#unsafely-treat-insecure-origin-as-secure:', originUrl);
+    }
+}
+
 function promptInstallApp() {
     if (deferredInstallPrompt) {
         deferredInstallPrompt.prompt();
@@ -37,9 +103,9 @@ function promptInstallApp() {
                 showToast('Hermes Phone app installed!');
             }
             deferredInstallPrompt = null;
-            const installBtn = document.getElementById('pwa-install-btn');
-            if (installBtn) installBtn.style.display = 'none';
         });
+    } else {
+        openInstallModal();
     }
 }
 
@@ -58,6 +124,8 @@ if ('getBattery' in navigator) {
     navigator.getBattery().then(battery => {
         function updateBattery() {
             const lvl = Math.round(battery.level * 100);
+            lastBatteryLevel = lvl;
+            lastBatteryCharging = battery.charging;
             const bTag = document.getElementById('battery-tag');
             if (bTag) bTag.innerText = (battery.charging ? '⚡ ' : '🔋 ') + lvl + '%';
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -75,7 +143,15 @@ if ('getBattery' in navigator) {
 }
 
 // WebSocket Connection
+let reconnectTimer = null;
 function connectPhone() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
     let wsUrl = WS_URL;
     const q = [];
     if (authToken) q.push(`token=${encodeURIComponent(authToken)}`);
@@ -86,13 +162,20 @@ function connectPhone() {
 
     ws.onopen = () => {
         document.getElementById('connection-orb').style.background = '#10b981';
+        const sub = document.getElementById('host-status-sub');
+        if (sub) {
+            sub.style.color = '#10b981';
+            sub.innerText = `● HOST ${location.hostname} ONLINE`;
+        }
         showToast('Connected to Hermes Mesh');
         const regPayload = {
             type: 'register',
             device_id: deviceId,
             name: 'Smartphone Companion',
             device_type: 'smartphone',
-            user_agent: navigator.userAgent
+            user_agent: navigator.userAgent,
+            battery: lastBatteryLevel,
+            is_charging: lastBatteryCharging
         };
         if (authToken) regPayload.token = authToken;
         if (pairParam) regPayload.pair = pairParam;
@@ -100,13 +183,14 @@ function connectPhone() {
     };
 
     ws.onclose = (event) => {
-        document.getElementById('connection-orb').style.background = '#ef4444';
+        document.getElementById('connection-orb').style.background = '#f59e0b';
         if (event && event.code === 4001) {
-            showToast('⚠️ Unauthorized. Please pair from PC dashboard.');
-            setTimeout(connectPhone, 8000);
+            localStorage.removeItem('hermes_phone_token');
+            authToken = '';
+            reconnectTimer = setTimeout(connectPhone, 3000);
             return;
         }
-        setTimeout(connectPhone, 3000);
+        reconnectTimer = setTimeout(connectPhone, 2000);
     };
 
     ws.onmessage = (event) => {
@@ -118,6 +202,36 @@ function connectPhone() {
         }
     };
 }
+
+// Instant Reconnect on Foreground & HTTP Keep-Alive Heartbeat
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        requestScreenWakeLock();
+        connectPhone();
+    } else {
+        fetch('/api/mesh/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId, battery: lastBatteryLevel, is_charging: lastBatteryCharging }),
+            keepalive: true
+        }).catch(() => {});
+    }
+});
+window.addEventListener('focus', () => connectPhone());
+window.addEventListener('pageshow', () => connectPhone());
+setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'heartbeat', battery: lastBatteryLevel, is_charging: lastBatteryCharging }));
+    } else {
+        connectPhone();
+        fetch('/api/mesh/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId, battery: lastBatteryLevel, is_charging: lastBatteryCharging }),
+            keepalive: true
+        }).catch(() => {});
+    }
+}, 12000);
 
 function handleMeshEvent(data) {
     if (data.type === 'welcome') {

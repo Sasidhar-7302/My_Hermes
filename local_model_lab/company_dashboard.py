@@ -169,17 +169,36 @@ except ImportError:
 try:
     from local_model_lab.deal_finder import (
         search_deals,
+        get_hot_frontpage_deals,
         get_deal_watch_store,
     )
 except ImportError:
     try:
         from deal_finder import (
             search_deals,
+            get_hot_frontpage_deals,
             get_deal_watch_store,
         )
     except Exception:
-        search_deals = lambda q, v=None, m=6: []
+        search_deals = lambda q, v=None, m=6, **kw: []
+        get_hot_frontpage_deals = lambda max_items=15: []
         get_deal_watch_store = lambda: None
+
+try:
+    from local_model_lab.hermes_browser import (
+        open_in_chintu_browser,
+        resolve_chintu_profile_info,
+    )
+except ImportError:
+    try:
+        from hermes_browser import (
+            open_in_chintu_browser,
+            resolve_chintu_profile_info,
+        )
+    except Exception:
+        open_in_chintu_browser = lambda url, new_window=False: {"status": "error", "message": "hermes_browser unavailable"}
+        resolve_chintu_profile_info = lambda: {"profile_directory": "Profile 1", "display_name": "Chintu", "email": "chintu.ai2026@gmail.com"}
+
 
 try:
     import channels
@@ -610,12 +629,45 @@ async def api_shutdown_cancel():
 async def api_deals_search(request: Request):
     data = await request.json()
     query = str(data.get("query", "")).strip()
-    vendors = data.get("vendors") or ["amazon", "newegg", "bestbuy", "walmart"]
-    max_results = int(data.get("max_results", 6))
+    vendors = data.get("vendors") or [
+        "slickdeals", "reddit", "dealnews",
+        "amazon", "newegg", "bestbuy", "walmart", "bhphoto", "microcenter"
+    ]
+    max_results = int(data.get("max_results", 8))
     if not query:
         return JSONResponse(content={"count": 0, "deals": []})
     deals = search_deals(query, vendors=vendors, max_results_per_vendor=max_results)
-    return JSONResponse(content={"count": len(deals), "deals": [d.to_dict() for d in deals]})
+    return JSONResponse(content={
+        "count": len(deals),
+        "deals": [d.to_dict() for d in deals],
+        "browser_profile": resolve_chintu_profile_info(),
+    })
+
+
+@app.get("/api/deals/hot")
+async def api_deals_hot(limit: int = 16):
+    deals = get_hot_frontpage_deals(max_results=limit)
+    return JSONResponse(content={
+        "count": len(deals),
+        "deals": [d.to_dict() for d in deals],
+        "browser_profile": resolve_chintu_profile_info(),
+    })
+
+
+@app.post("/api/browser/open_chintu")
+async def api_browser_open_chintu(request: Request):
+    data = await request.json()
+    url = str(data.get("url", "")).strip()
+    new_window = bool(data.get("new_window", False))
+    if not url:
+        return JSONResponse(content={"status": "error", "message": "Missing url"}, status_code=400)
+    res = open_in_chintu_browser(url, new_window=new_window)
+    return JSONResponse(content=res)
+
+
+@app.get("/api/browser/chintu_status")
+async def api_browser_chintu_status():
+    return JSONResponse(content=resolve_chintu_profile_info())
 
 
 @app.get("/api/deals/watches")
@@ -630,7 +682,10 @@ async def api_deals_watch_add(request: Request):
     data = await request.json()
     query = str(data.get("query", "")).strip()
     target_price = float(data["target_price"]) if data.get("target_price") is not None else None
-    vendors = data.get("vendors") or ["amazon", "newegg", "bestbuy", "walmart"]
+    vendors = data.get("vendors") or [
+        "slickdeals", "reddit", "dealnews",
+        "amazon", "newegg", "bestbuy", "walmart", "bhphoto", "microcenter"
+    ]
     interval = int(data.get("interval_minutes", 180))
     store = get_deal_watch_store()
     if not store:
@@ -2376,23 +2431,35 @@ def dashboard():
         <div class="panel-container">
             <div class="panel-header">
                 <div>
-                    <h2 class="panel-title">🛍️ Multi-Vendor Deal Finder & Price Drop Tracker</h2>
-                    <p class="panel-desc">Scrapes and cross-references live prices across Amazon, Newegg, Best Buy, Walmart, B&H Photo, and Micro Center without browser overhead.</p>
+                    <h2 class="panel-title">🛍️ Multi-Vendor & Slickdeals Intelligence Engine</h2>
+                    <p class="panel-desc">Cross-references live community frontpage deals (Slickdeals, r/buildapcsales, DealNews) and major retailers using Hermes's isolated Chintu Browser profile (never touches your personal profile).</p>
                 </div>
-                <div class="status-pill">
-                    <div class="pulse-dot"></div>
-                    <span>READ-ONLY SAFEGUARD ACTIVE</span>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <div class="status-pill" style="border-color: rgba(56,189,248,0.4); color: #38bdf8;" title="Pinned to Chrome Profile 1 (Chintu - chintu.ai2026@gmail.com). Personal Sasidhar profile is strictly off-limits.">
+                        <div class="pulse-dot" style="background: #38bdf8;"></div>
+                        <span id="chintu-browser-pill">🌐 CHINTU BROWSER: PROFILE 1</span>
+                    </div>
+                    <div class="status-pill">
+                        <div class="pulse-dot"></div>
+                        <span>READ-ONLY SAFEGUARD ACTIVE</span>
+                    </div>
                 </div>
             </div>
 
             <!-- SEARCH BAR -->
             <div style="background: var(--bg-input); padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle); margin-bottom: 20px;">
                 <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-                    <input type="text" id="deal-search-query" class="input-text" placeholder="Search product (e.g. 2TB NVMe Gen4 SSD, RTX 4070 Super)..." style="flex: 1; min-width: 260px;" />
-                    <button class="btn-action" onclick="executeDealSearch()">🔍 Search Deals</button>
+                    <input type="text" id="deal-search-query" class="input-text" placeholder="Search product (e.g. 2TB NVMe Gen4 SSD, RTX 5080, OLED Monitor, MacBook)..." style="flex: 1; min-width: 260px;" onkeydown="if(event.key==='Enter') executeDealSearch();" />
+                    <button class="btn-action" onclick="executeDealSearch()">🔍 Search All Deals</button>
+                    <button class="btn-action" style="background: rgba(245,158,11,0.15); border-color: #f59e0b; color: #fbbf24;" onclick="loadHotFrontpageDeals()">🔥 Slickdeals & Reddit Hot Frontpage</button>
+                    <button class="btn-action" style="background: rgba(56,189,248,0.12); border-color: #38bdf8; color: #38bdf8;" onclick="openInChintuBrowser('https://slickdeals.net/deals/')">🌐 Open Slickdeals in Chintu</button>
                 </div>
-                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap;">
-                    <span>Include:</span>
+                <div style="display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); flex-wrap: wrap; align-items: center;">
+                    <span style="font-weight: 700; color: var(--text-heading);">Community & Aggregators:</span>
+                    <label style="color: #fbbf24; font-weight: 600;"><input type="checkbox" id="v-slickdeals" checked /> 🔥 Slickdeals</label>
+                    <label style="color: #f97316; font-weight: 600;"><input type="checkbox" id="v-reddit" checked /> 👽 Reddit (r/buildapcsales & r/deals)</label>
+                    <label style="color: #38bdf8; font-weight: 600;"><input type="checkbox" id="v-dealnews" checked /> 📰 DealNews</label>
+                    <span style="margin-left: 6px; font-weight: 700; color: var(--text-heading);">Direct Retailers:</span>
                     <label><input type="checkbox" id="v-amazon" checked /> Amazon</label>
                     <label><input type="checkbox" id="v-newegg" checked /> Newegg</label>
                     <label><input type="checkbox" id="v-bestbuy" checked /> Best Buy</label>
@@ -2404,23 +2471,26 @@ def dashboard():
 
             <!-- SEARCH RESULTS TABLE -->
             <div style="margin-bottom: 24px;">
-                <h3 style="font-size: 13px; color: var(--text-heading); margin-bottom: 10px;">Live Price Comparison (Sorted by Best Price)</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 id="deals-table-heading" style="font-size: 13px; color: var(--text-heading); margin: 0;">Live Price Comparison (Sorted by Best Total Price)</h3>
+                    <span id="deals-count-badge" style="font-size: 11px; color: var(--text-muted);"></span>
+                </div>
                 <div style="overflow-x: auto;">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>Vendor</th>
-                                <th>Item Title</th>
+                                <th>Source / Vendor</th>
+                                <th>Deal Title</th>
                                 <th>Item Price</th>
                                 <th>Shipping</th>
                                 <th>Best Total</th>
-                                <th>Link</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="deals-results-tbody">
                             <tr>
                                 <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
-                                    Type a product query above and click "Search Deals" to compare prices across vendors.
+                                    Type a product query above and click "Search All Deals", or click "🔥 Slickdeals & Reddit Hot Frontpage" to browse live community deals.
                                 </td>
                             </tr>
                         </tbody>
@@ -2747,7 +2817,7 @@ def dashboard():
                                 <span style="font-size: 11px; font-weight: 600; color: #10b981; background: rgba(16,185,129,0.1); padding: 2px 8px; border-radius: 10px;">⚡ AI Core Online</span>
                             </div>
                             <div style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle); margin-bottom: 10px;">
-                                <img id="wall-pc-img" src="/api/desktop/stream?monitor=1&fps=1&max_width=640&quality=60" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; document.getElementById('wall-pc-placeholder').style.display='flex';" />
+                                <img id="wall-pc-img" src="/api/desktop/snapshot?monitor=primary&max_width=800&quality=75" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.style.display='none'; document.getElementById('wall-pc-placeholder').style.display='flex';" />
                                 <div id="wall-pc-placeholder" style="display: none; flex-direction: column; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; text-align: center; padding: 16px;">
                                     <span style="font-size: 32px; opacity: 0.5;">🖥️</span>
                                     <span style="font-weight: 600; color: #ffffff;">Host PC Display</span>
@@ -3190,7 +3260,13 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (tabId === 'desktop') refreshWindows();
             if (tabId === 'paper') checkPaperStatus();
             if (tabId === 'shutdown') refreshShutdownStatus();
-            if (tabId === 'deals') refreshWatches();
+            if (tabId === 'deals') {
+                refreshWatches();
+                if (!window.__hotDealsLoadedOnce) {
+                    window.__hotDealsLoadedOnce = true;
+                    loadHotFrontpageDeals();
+                }
+            }
             if (tabId === 'channels') refreshChannels();
             if (tabId === 'mesh') refreshMeshDevices();
             if (tabId === 'rpa') refreshMacros();
@@ -3491,13 +3567,86 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         }
 
         // --- Deal Finder & Watchlist Logic ---
+        async function openInChintuBrowser(url) {
+            try {
+                const res = await fetch('/api/browser/open_chintu', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, new_window: false })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    showToast(`🌐 Opened in Chintu Browser (${data.profile || 'Profile 1'})`);
+                } else {
+                    alert('Chintu browser error: ' + (data.message || 'Unknown'));
+                }
+            } catch (e) {
+                alert('Browser launch error: ' + e);
+            }
+        }
+
+        function renderDealsTable(deals, headingText) {
+            const tbody = document.getElementById('deals-results-tbody');
+            const heading = document.getElementById('deals-table-heading');
+            const countBadge = document.getElementById('deals-count-badge');
+            if (heading && headingText) heading.innerText = headingText;
+            if (countBadge) countBadge.innerText = deals ? `${deals.length} verified listings` : '';
+            tbody.innerHTML = '';
+            if (!deals || deals.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">No matching priced listings found. Try broader keywords or click "🔥 Slickdeals & Reddit Hot Frontpage".</td></tr>';
+                return;
+            }
+            deals.forEach((d, idx) => {
+                const row = document.createElement('tr');
+                const badge = idx === 0 ? '<span style="color: var(--accent-gold); font-weight: 700; margin-left: 6px;">★ BEST DEAL</span>' : '';
+                const vLower = (d.vendor || '').toLowerCase();
+                let vendorStyle = 'color: var(--text-heading);';
+                if (vLower.includes('slickdeals')) vendorStyle = 'color: #fbbf24;';
+                else if (vLower.includes('reddit')) vendorStyle = 'color: #f97316;';
+                else if (vLower.includes('dealnews')) vendorStyle = 'color: #38bdf8;';
+                const safeUrl = (d.url || '').replace(/'/g, "\\'");
+                const priceStr = d.price > 0 ? `$${d.price.toFixed(2)}` : '<span style="color: #fbbf24;">Community Deal</span>';
+                const totalStr = d.total > 0 ? `$${d.total.toFixed(2)}` : 'See Thread';
+                row.innerHTML = `
+                    <td style="font-weight: 700; ${vendorStyle}">${d.vendor}</td>
+                    <td style="max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${(d.title || '').replace(/"/g, '&quot;')}">${d.title}</td>
+                    <td>${priceStr}</td>
+                    <td>${d.shipping ? '$' + d.shipping.toFixed(2) : 'Free / Community'}</td>
+                    <td style="font-weight: 700; color: var(--accent-green); font-size: 13px;">${totalStr}${badge}</td>
+                    <td>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <button class="btn-action" style="padding: 2px 8px; font-size: 10px; background: rgba(56,189,248,0.15); border-color: #38bdf8; color: #38bdf8;" onclick="openInChintuBrowser('${safeUrl}')">🌐 Chintu Browser</button>
+                            <a href="${d.url}" target="_blank" class="btn-action" style="padding: 2px 8px; font-size: 10px; text-decoration: none;">New Tab &rarr;</a>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function loadHotFrontpageDeals() {
+            const tbody = document.getElementById('deals-results-tbody');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #fbbf24; padding: 18px;">🔥 Fetching live Slickdeals Frontpage, Reddit r/buildapcsales & r/deals, and DealNews...</td></tr>';
+            try {
+                const res = await fetch('/api/deals/hot?limit=18');
+                const data = await res.json();
+                renderDealsTable(data.deals || [], '🔥 Live Slickdeals, Reddit & DealNews Frontpage Hot Deals');
+                showToast(`Loaded ${(data.deals || []).length} live frontpage deals`);
+            } catch (e) {
+                alert('Hot deals error: ' + e);
+            }
+        }
+
         async function executeDealSearch() {
             const query = document.getElementById('deal-search-query').value.trim();
             if (!query) {
-                alert('Please enter a product to search');
+                loadHotFrontpageDeals();
                 return;
             }
             const vendors = [];
+            if (document.getElementById('v-slickdeals') && document.getElementById('v-slickdeals').checked) vendors.push('slickdeals');
+            if (document.getElementById('v-reddit') && document.getElementById('v-reddit').checked) vendors.push('reddit');
+            if (document.getElementById('v-dealnews') && document.getElementById('v-dealnews').checked) vendors.push('dealnews');
             if (document.getElementById('v-amazon').checked) vendors.push('amazon');
             if (document.getElementById('v-newegg').checked) vendors.push('newegg');
             if (document.getElementById('v-bestbuy').checked) vendors.push('bestbuy');
@@ -3506,34 +3655,17 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (document.getElementById('v-microcenter').checked) vendors.push('microcenter');
 
             const tbody = document.getElementById('deals-results-tbody');
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-green); padding: 18px;">Scanning retailers (Amazon, Newegg, Best Buy...)...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-green); padding: 18px;">🔍 Scanning Slickdeals, Reddit Deals, DealNews, Amazon, Newegg, Best Buy & Chintu Headless Engine...</td></tr>';
 
             try {
                 const res = await fetch('/api/deals/search', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query, vendors: vendors, max_results: 6 })
+                    body: JSON.stringify({ query: query, vendors: vendors, max_results: 8 })
                 });
                 const data = await res.json();
-                tbody.innerHTML = '';
-                if (!data.deals || data.deals.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">No matching priced listings found. Try broader keywords.</td></tr>';
-                    return;
-                }
-                data.deals.forEach((d, idx) => {
-                    const row = document.createElement('tr');
-                    const badge = idx === 0 ? '<span style="color: var(--accent-gold); font-weight: 700; margin-left: 6px;">★ BEST DEAL</span>' : '';
-                    row.innerHTML = `
-                        <td style="font-weight: 700; color: var(--text-heading);">${d.vendor}</td>
-                        <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${d.title}</td>
-                        <td>$${d.price.toFixed(2)}</td>
-                        <td>${d.shipping ? '$' + d.shipping.toFixed(2) : 'Free / In-Store'}</td>
-                        <td style="font-weight: 700; color: var(--accent-green); font-size: 13px;">$${d.total.toFixed(2)}${badge}</td>
-                        <td><a href="${d.url}" target="_blank" class="btn-action" style="padding: 2px 8px; font-size: 10px; text-decoration: none;">View Item &rarr;</a></td>
-                    `;
-                    tbody.appendChild(row);
-                });
-                showToast(`Found ${data.deals.length} deals across vendors`);
+                renderDealsTable(data.deals || [], `Live Price Comparison for "${query}" (Sorted by Best Price)`);
+                showToast(`Found ${(data.deals || []).length} deals across community & retail feeds`);
             } catch (e) {
                 alert('Search error: ' + e);
             }
@@ -4015,6 +4147,14 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                     }
                 }
 
+                const pcImg = document.getElementById('wall-pc-img');
+                if (pcImg) {
+                    pcImg.src = '/api/desktop/snapshot?monitor=primary&max_width=800&quality=75&t=' + Date.now();
+                    pcImg.style.display = 'block';
+                    const pcPh = document.getElementById('wall-pc-placeholder');
+                    if (pcPh) pcPh.style.display = 'none';
+                }
+
                 refreshMeshLogs();
             } catch (e) {
                 console.error("Failed to refresh mesh devices", e);
@@ -4121,7 +4261,10 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         function refreshPcScreen() {
             const img = document.getElementById('wall-pc-img');
             if (img) {
-                img.src = '/api/desktop/stream?monitor=1&fps=1&max_width=640&quality=60&t=' + Date.now();
+                img.src = '/api/desktop/snapshot?monitor=primary&max_width=800&quality=75&t=' + Date.now();
+                img.style.display = 'block';
+                const ph = document.getElementById('wall-pc-placeholder');
+                if (ph) ph.style.display = 'none';
                 showToast("Host PC preview refreshed");
             }
         }

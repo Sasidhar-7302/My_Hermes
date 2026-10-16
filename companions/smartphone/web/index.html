@@ -20,18 +20,21 @@
                 <div class="pulse-orb" id="connection-orb"></div>
                 <div>
                     <div style="font-size: 13px; font-weight: 800; color: #ffffff; letter-spacing: 0.04em;">HERMES MOBILE</div>
-                    <div style="font-size: 10px; color: var(--accent-emerald);">● HOST 10.0.0.60 ONLINE</div>
+                    <div id="host-status-sub" style="font-size: 10px; color: var(--accent-emerald);">● HOST 10.0.0.60 ONLINE</div>
                 </div>
             </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
-                <button id="pwa-install-btn" class="action-btn" style="display: none; padding: 4px 8px; font-size: 10px;" onclick="promptInstallApp()">
-                    ⬇️ Install
+            <div style="display: flex; gap: 5px; align-items: center;">
+                <button id="fullscreen-app-btn" class="action-btn" style="padding: 4px 7px; font-size: 10px; background: rgba(56,189,248,0.18); border-color: #38bdf8; color: #38bdf8;" onclick="toggleNativeFullscreen()" title="Full-Screen Native App Mode (Hide Browser Bar)">
+                    ⛶ App Mode
                 </button>
-                <div id="battery-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 8px; border-radius: 6px;">
+                <button id="pwa-install-btn" class="action-btn" style="padding: 4px 7px; font-size: 10px; background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981;" onclick="promptInstallApp()">
+                    📲 Install
+                </button>
+                <div id="battery-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 4px 7px; border-radius: 6px;">
                     🔋 --%
                 </div>
-                <button class="action-btn danger" style="padding: 4px 8px; font-size: 10px; border-radius: 6px;" onclick="triggerPanicStop()" title="Emergency Stop">
-                    🚨 Stop
+                <button class="action-btn danger" style="padding: 4px 7px; font-size: 10px; border-radius: 6px;" onclick="triggerPanicStop()" title="Emergency Stop">
+                    🚨
                 </button>
             </div>
         </div>
@@ -195,6 +198,68 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Standalone Native App & Smartwatch Download Hub -->
+            <div class="card" style="border-color: rgba(56,189,248,0.35);">
+                <div class="card-title">📲 Standalone Native App & Watch Install</div>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                    Run Hermes without any browser URL bar on your Mobile Phone or Smartwatch:
+                </p>
+                <div class="btn-grid">
+                    <button class="action-btn" style="background: rgba(56,189,248,0.18); border-color: #38bdf8; color: #ffffff;" onclick="toggleNativeFullscreen()">
+                        <span>⛶ Full-Screen App Mode</span>
+                    </button>
+                    <button class="action-btn" style="background: rgba(16,185,129,0.18); border-color: #10b981; color: #ffffff;" onclick="openInstallModal()">
+                        <span>📲 Download Native App</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NATIVE APP & SMARTWATCH INSTALLER MODAL -->
+    <div id="install-app-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 16px;">
+        <div style="background: #0d131a; border: 1px solid #1e293b; border-radius: 14px; max-width: 400px; width: 100%; padding: 18px; color: #f8fafc; box-shadow: 0 12px 32px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div style="font-size: 15px; font-weight: 800; color: #ffffff;">📲 Install Hermes Native App</div>
+                <button onclick="closeInstallModal()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;">&times;</button>
+            </div>
+
+            <!-- 1. Instant Fullscreen App Mode -->
+            <div style="background: #131c26; border: 1px solid rgba(56,189,248,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;">1. Instant Full-Screen App Mode (Zero Browser Bar)</div>
+                <p style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">Immediately hides Chrome's address bar and keeps your connection awake with Screen WakeLock.</p>
+                <button class="action-btn" style="width: 100%; background: #38bdf8; color: #000; font-weight: 800;" onclick="toggleNativeFullscreen(); closeInstallModal();">
+                    ⛶ Launch Full-Screen App Mode Now
+                </button>
+            </div>
+
+            <!-- 2. Android Standalone WebAPK -->
+            <div style="background: #131c26; border: 1px solid rgba(16,185,129,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 700; color: #10b981; margin-bottom: 4px;">2. Install Standalone Android App Icon</div>
+                <ol style="font-size: 11px; color: #cbd5e1; padding-left: 16px; line-height: 1.5; margin-bottom: 8px;">
+                    <li>Tap Chrome's <strong>⋮ (3-dots menu)</strong> at top-right &rarr; tap <strong>"Add to Home screen"</strong> &rarr; <strong>"Install"</strong>.</li>
+                    <li><em>For full native APK mode + Mic/Screen-Share over Wi-Fi:</em> Tap below to copy <code>http://10.0.0.60:8000</code>, open <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, paste it, set to <strong>Enabled</strong>, and Relaunch!</li>
+                </ol>
+                <button class="action-btn" style="width: 100%; background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; font-size: 11px;" onclick="copyOriginFlagHelper()">
+                    📋 Copy Host URL &amp; Flag Instructions
+                </button>
+            </div>
+
+            <!-- 3. Smartwatch Installation -->
+            <div style="background: #131c26; border: 1px solid rgba(168,85,247,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 700; color: #c084fc; margin-bottom: 4px;">3. ⌚ Install on Smartwatch (Wear OS / Galaxy / Apple)</div>
+                <ul style="font-size: 11px; color: #cbd5e1; padding-left: 16px; line-height: 1.5; margin-bottom: 8px;">
+                    <li><strong>On Watch Browser (Samsung Internet / Chrome):</strong> Type short URL <strong style="color:#10b981;">10.0.0.60:8000/watch</strong> and tap <em>Add to Home Screen / Tile</em>.</li>
+                    <li><strong>1-Click PC-to-Watch ADB Installer:</strong> Run <code>Install-Hermes-Watch-And-Phone.bat</code> on your PC to push the app straight to your watch over Wi-Fi!</li>
+                </ul>
+                <div style="display: flex; gap: 6px;">
+                    <a href="/watch" class="action-btn" style="flex: 1; text-decoration: none; text-align: center; font-size: 11px; background: rgba(168,85,247,0.2); border-color: #c084fc; color: #e9d5ff;">⌚ Preview Watch HUD</a>
+                    <a href="/api/companion/install/ios_app.mobileconfig" class="action-btn" style="flex: 1; text-decoration: none; text-align: center; font-size: 11px;">🍏 iOS/Watch Profile</a>
+                </div>
+            </div>
+
+            <button class="action-btn" style="width: 100%;" onclick="closeInstallModal()">Done</button>
         </div>
     </div>
 

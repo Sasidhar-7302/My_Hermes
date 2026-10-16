@@ -1150,12 +1150,23 @@ def deliver_messages(
             )
 
 
-def wait_for_local_delivery(hour: int = 8, minute: int = 0) -> None:
-    """Hold a completed early-morning briefing until its local delivery target."""
+SCRIPT_START_MONOTONIC = time.monotonic()
+CRON_SAFE_MAX_RUNTIME_SECONDS = 3360  # 56 min ceiling (leaves 4 min buffer before 3600s cron kill)
+
+
+def wait_for_local_delivery(hour: int = 8, minute: int = 0, buffer_seconds: int = 150) -> None:
+    """Hold a completed early-morning briefing until its local delivery target,
+    waking up slightly early so multi-message Telegram delivery completes well
+    before the 3600s cron timeout."""
     now = datetime.now(TIMEZONE)
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0) - timedelta(seconds=buffer_seconds)
     if 5 <= now.hour < hour and target > now:
-        time.sleep((target - now).total_seconds())
+        desired_sleep = (target - now).total_seconds()
+        elapsed = time.monotonic() - SCRIPT_START_MONOTONIC
+        max_allowed_sleep = max(0.0, CRON_SAFE_MAX_RUNTIME_SECONDS - elapsed)
+        actual_sleep = min(desired_sleep, max_allowed_sleep)
+        if actual_sleep > 0:
+            time.sleep(actual_sleep)
 
 
 def main() -> None:

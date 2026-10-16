@@ -163,6 +163,23 @@ class PairingManager:
             )
             return True, "paired_new", new_token
 
+        # 3. Seamless Home Screen / Standalone App continuity for already-paired LAN IPs
+        if client_ip and (client_ip.startswith("10.") or client_ip.startswith("192.168.") or client_ip.startswith("172.")):
+            with self._lock:
+                trusted_lan_ip = any(
+                    d.get("last_ip") == client_ip and not d.get("revoked", False)
+                    for d in self._paired_devices.values()
+                )
+            if trusted_lan_ip:
+                new_token = self.register_device(
+                    device_id=device_id,
+                    name=name,
+                    device_type=device_type,
+                    user_agent=user_agent,
+                    client_ip=client_ip,
+                )
+                return True, "paired_lan_continuity", new_token
+
         log_companion_event(
             "AUTH_REJECTED",
             f"Unauthorized connection attempt from {device_id} ({client_ip})",

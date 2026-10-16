@@ -7,9 +7,9 @@ let ws = null;
 let deviceId = localStorage.getItem('hermes_watch_id') || ('watch-' + Math.random().toString(36).substring(2, 8));
 localStorage.setItem('hermes_watch_id', deviceId);
 
-// Pairing & Authentication token management
+// Pairing & Authentication token management (with server-injected auto-pair fallback)
 const urlParams = new URLSearchParams(window.location.search);
-const pairParam = urlParams.get('pair') || urlParams.get('pairing_code');
+const pairParam = urlParams.get('pair') || urlParams.get('pairing_code') || window.__HERMES_AUTO_PAIR__ || '';
 const tokenParam = urlParams.get('token');
 if (tokenParam) {
     localStorage.setItem('hermes_watch_token', tokenParam);
@@ -20,6 +20,31 @@ let isListening = false;
 let isHolding = false;
 let currentTranscript = '';
 let recognition = null;
+let watchWakeLock = null;
+let lastWatchBattery = null;
+let lastWatchCharging = false;
+
+async function requestWatchWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            watchWakeLock = await navigator.wakeLock.request('screen');
+        } catch (_) {}
+    }
+}
+requestWatchWakeLock();
+
+function toggleWatchFullscreen() {
+    requestWatchWakeLock();
+    const docEl = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+        if (req) {
+            req.call(docEl, { navigationUI: 'hide' }).then(() => {
+                showWatchToast('⌚ Fullscreen HUD');
+            }).catch(() => {});
+        }
+    }
+}
 
 // Clock updates
 function updateClock() {
@@ -27,6 +52,7 @@ function updateClock() {
     const clockEl = document.getElementById('watch-clock');
     if (clockEl) {
         clockEl.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        clockEl.onclick = toggleWatchFullscreen;
     }
 }
 setInterval(updateClock, 1000);
@@ -55,6 +81,8 @@ if ('getBattery' in navigator) {
     navigator.getBattery().then(battery => {
         function sendBattery() {
             const level = Math.round(battery.level * 100);
+            lastWatchBattery = level;
+            lastWatchCharging = battery.charging;
             const pill = document.getElementById('battery-pill');
             if (pill) {
                 pill.innerText = (battery.charging ? '⚡ ' : '🔋 ') + level + '%';
@@ -74,7 +102,15 @@ if ('getBattery' in navigator) {
 }
 
 // WebSocket Connection
+let watchReconnectTimer = null;
 function connectWatch() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+    if (watchReconnectTimer) {
+        clearTimeout(watchReconnectTimer);
+        watchReconnectTimer = null;
+    }
     let wsUrl = WS_URL;
     const q = [];
     if (authToken) q.push(`token=${encodeURIComponent(authToken)}`);
@@ -96,7 +132,9 @@ function connectWatch() {
             device_id: deviceId,
             name: 'Smartwatch HUD',
             device_type: 'smartwatch',
-            user_agent: navigator.userAgent
+            user_agent: navigator.userAgent,
+            battery: lastWatchBattery,
+            is_charging: lastWatchCharging
         };
         if (authToken) regPayload.token = authToken;
         if (pairParam) regPayload.pair = pairParam;
@@ -106,16 +144,16 @@ function connectWatch() {
     ws.onclose = (event) => {
         const dot = document.getElementById('status-dot');
         const stText = document.getElementById('status-text');
-        if (dot) dot.style.background = '#ef4444';
-        if (stText) stText.innerText = 'OFFLINE';
+        if (dot) dot.style.background = '#f59e0b';
+        if (stText) stText.innerText = 'STANDBY';
 
         if (event && event.code === 4001) {
-            showWatchToast('⚠️ Pair from PC');
-            setCaption('Scan QR code on PC');
-            setTimeout(connectWatch, 8000);
+            localStorage.removeItem('hermes_watch_token');
+            authToken = '';
+            watchReconnectTimer = setTimeout(connectWatch, 3000);
             return;
         }
-        setTimeout(connectWatch, 3000);
+        watchReconnectTimer = setTimeout(connectWatch, 2000);
     };
 
     ws.onmessage = (event) => {
@@ -127,6 +165,28 @@ function connectWatch() {
         }
     };
 }
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        requestWatchWakeLock();
+        connectWatch();
+    } else {
+        fetch('/api/mesh/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: deviceId, battery: lastWatchBattery, is_charging: lastWatchCharging }),
+            keepalive: true
+        }).catch(() => {});
+    }
+});
+window.addEventListener('focus', () => connectWatch());
+setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'heartbeat', battery: lastWatchBattery, is_charging: lastWatchCharging }));
+    } else {
+        connectWatch();
+    }
+}, 12000);
 
 function handleIncomingPacket(data) {
     if (data.type === 'welcome') {

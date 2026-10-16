@@ -133,10 +133,42 @@ def _check_gateway_process() -> Dict[str, Any]:
     return {"ok": True, "label": label, "detail": f"running (PID {roots[0]})"}
 
 
+def _ensure_dashboard_running() -> Dict[str, Any]:
+    probe = _check_http("OmniMesh dashboard", "http://127.0.0.1:8000/")
+    if probe["ok"]:
+        return probe
+    python_bin = APP_DIR / "venv" / "Scripts" / ("pythonw.exe" if sys.platform == "win32" else "python")
+    if not python_bin.exists():
+        python_bin = APP_DIR / "venv" / "Scripts" / "python.exe"
+    script_path = APP_DIR / "local_model_lab" / "company_dashboard.py"
+    if python_bin.exists() and script_path.exists():
+        try:
+            flags = 0
+            if sys.platform == "win32":
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+            subprocess.Popen(
+                [str(python_bin), "-X", "utf8", str(script_path)],
+                cwd=str(APP_DIR),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+            )
+            import time
+            for _ in range(8):
+                time.sleep(1.0)
+                reprobe = _check_http("OmniMesh dashboard", "http://127.0.0.1:8000/")
+                if reprobe["ok"]:
+                    reprobe["detail"] = f"{reprobe['detail']} (auto-restarted)"
+                    return reprobe
+        except Exception as exc:
+            return {"ok": False, "label": "OmniMesh dashboard", "detail": f"offline; restart failed ({exc})"}
+    return probe
+
+
 def check_services() -> Dict[str, Dict[str, Any]]:
     return {
         "ollama": _check_http("Local Ollama", "http://127.0.0.1:11434/api/tags"),
-        "dashboard": _check_http("OmniMesh dashboard", "http://127.0.0.1:8000/"),
+        "dashboard": _ensure_dashboard_running(),
         "gateway": _check_gateway_process(),
     }
 

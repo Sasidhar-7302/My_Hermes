@@ -311,8 +311,9 @@ def resolve_application(app_target: str) -> Dict[str, Any]:
         "notepad": {"type": "cmd", "cmd": "notepad.exe"},
         "calculator": {"type": "cmd", "cmd": "calc.exe"},
         "calc": {"type": "cmd", "cmd": "calc.exe"},
-        "chrome": {"type": "cmd", "cmd": "chrome"},
-        "browser": {"type": "cmd", "cmd": "chrome"},
+        "chrome": {"type": "cmd", "cmd": 'start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --profile-directory="Profile 1" --no-first-run'},
+        "browser": {"type": "cmd", "cmd": 'start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --profile-directory="Profile 1" --no-first-run'},
+        "chintu browser": {"type": "cmd", "cmd": 'start "" "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --profile-directory="Profile 1" --no-first-run'},
         "brave": {"type": "cmd", "cmd": "brave"},
         "explorer": {"type": "cmd", "cmd": "explorer.exe"},
         "terminal": {"type": "cmd", "cmd": "powershell.exe"},
@@ -462,11 +463,14 @@ def mouse_scroll(amount: int = 5, direction: str = "down") -> Dict[str, Any]:
 # ── BROWSER AUTOMATION PRIMITIVES ───────────────────────────────────────────
 
 def open_browser(url: str = "https://www.google.com") -> Dict[str, Any]:
-    """Opens a webpage in the browser."""
+    """Opens a webpage inside the dedicated 'Chintu' Chrome profile (Profile 1), never touching the personal profile."""
     audit_action_safety("open_browser", url)
     try:
-        subprocess.Popen(f"start {url}", shell=True)
-        return {"status": "success", "url": url}
+        try:
+            from local_model_lab.hermes_browser import open_in_chintu_browser
+        except ImportError:
+            from hermes_browser import open_in_chintu_browser
+        return open_in_chintu_browser(url)
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

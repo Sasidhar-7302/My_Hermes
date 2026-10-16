@@ -7,6 +7,7 @@ Dedicated modular architecture for Smartwatch, Smartphone, and Laptop.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -49,8 +50,12 @@ def register_companion_routes(app: FastAPI):
     """Registers all standalone companion routes and WebSocket endpoints onto FastAPI app."""
     hub = get_omni_mesh_hub()
 
-    # ── SMARTWATCH ROUTES ───────────────────────────────────────────────────
+    # ── SMARTWATCH ROUTES (+ SHORT WRIST ALIASES) ───────────────────────────
     @app.get("/companions/smartwatch", response_class=HTMLResponse)
+    @app.get("/companion/smartwatch", response_class=HTMLResponse)
+    @app.get("/companion/watch", response_class=HTMLResponse)
+    @app.get("/watch", response_class=HTMLResponse)
+    @app.get("/w", response_class=HTMLResponse)
     async def get_smartwatch_page():
         return HTMLResponse(content=render_smartwatch_html(hub.lan_ip, hub.port))
 
@@ -68,8 +73,13 @@ def register_companion_routes(app: FastAPI):
         js_file = _COMPANIONS_DIR / "smartwatch" / "web" / "watch.js"
         return Response(content=js_file.read_text(encoding="utf-8") if js_file.exists() else "", media_type="application/javascript")
 
-    # ── SMARTPHONE ROUTES ───────────────────────────────────────────────────
+    # ── SMARTPHONE ROUTES (+ SHORT MOBILE ALIASES) ──────────────────────────
     @app.get("/companions/smartphone", response_class=HTMLResponse)
+    @app.get("/companion/smartphone", response_class=HTMLResponse)
+    @app.get("/companion/mobile", response_class=HTMLResponse)
+    @app.get("/phone", response_class=HTMLResponse)
+    @app.get("/mobile", response_class=HTMLResponse)
+    @app.get("/m", response_class=HTMLResponse)
     async def get_smartphone_page():
         return HTMLResponse(content=render_smartphone_html(hub.lan_ip, hub.port))
 
@@ -91,8 +101,11 @@ def register_companion_routes(app: FastAPI):
         js_file = _COMPANIONS_DIR / "smartphone" / "web" / "mobile.js"
         return Response(content=js_file.read_text(encoding="utf-8") if js_file.exists() else "", media_type="application/javascript")
 
-    # ── LAPTOP ROUTES ───────────────────────────────────────────────────────
+    # ── LAPTOP ROUTES (+ SHORT ALIASES) ─────────────────────────────────────
     @app.get("/companions/laptop", response_class=HTMLResponse)
+    @app.get("/companion/laptop", response_class=HTMLResponse)
+    @app.get("/laptop", response_class=HTMLResponse)
+    @app.get("/l", response_class=HTMLResponse)
     async def get_laptop_page():
         return HTMLResponse(content=render_laptop_html(hub.lan_ip, hub.port))
 
@@ -126,6 +139,173 @@ def register_companion_routes(app: FastAPI):
     @app.get("/companion/sw.js")
     async def get_companion_sw():
         return Response(content=get_smartphone_sw(), media_type="application/javascript")
+
+    # ── STANDALONE NATIVE APP INSTALLERS (MOBILE & WATCH) ──────────────────
+    @app.get("/api/companion/install/ios_app.mobileconfig")
+    async def download_ios_mobileconfig(target: str = "all"):
+        """
+        Generates an Apple iOS/iPadOS/watchOS Configuration Profile (.mobileconfig)
+        that installs Hermes Mobile and Hermes Watch HUD as 100% Full-Screen
+        Standalone WebClip Apps (FullScreen=true, no Safari address bar).
+        """
+        from .auth import get_pairing_manager
+        pair_code = get_pairing_manager().create_pairing_code(ttl_seconds=86400 * 30)
+        phone_url = f"http://{hub.lan_ip}:{hub.port}/phone?pair={pair_code}"
+        watch_url = f"http://{hub.lan_ip}:{hub.port}/watch?pair={pair_code}"
+        mobileconfig_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>FullScreen</key>
+            <true/>
+            <key>IgnoreManifestScope</key>
+            <true/>
+            <key>IsRemovable</key>
+            <true/>
+            <key>Label</key>
+            <string>Hermes AI</string>
+            <key>PayloadDescription</key>
+            <string>Hermes Standalone Full-Screen Mobile Companion</string>
+            <key>PayloadDisplayName</key>
+            <string>Hermes Mobile App</string>
+            <key>PayloadIdentifier</key>
+            <string>ai.hermes.companion.mobile.webclip</string>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadUUID</key>
+            <string>8A4E9921-1000-4000-8000-0013EF600442</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>Precomposed</key>
+            <true/>
+            <key>URL</key>
+            <string>{phone_url}</string>
+        </dict>
+        <dict>
+            <key>FullScreen</key>
+            <true/>
+            <key>IgnoreManifestScope</key>
+            <true/>
+            <key>IsRemovable</key>
+            <true/>
+            <key>Label</key>
+            <string>Hermes Watch</string>
+            <key>PayloadDescription</key>
+            <string>Hermes Standalone AMOLED Smartwatch HUD</string>
+            <key>PayloadDisplayName</key>
+            <string>Hermes Watch HUD</string>
+            <key>PayloadIdentifier</key>
+            <string>ai.hermes.companion.watch.webclip</string>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadUUID</key>
+            <string>8A4E9922-1000-4000-8000-0013EF600442</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>Precomposed</key>
+            <true/>
+            <key>URL</key>
+            <string>{watch_url}</string>
+        </dict>
+    </array>
+    <key>PayloadDescription</key>
+    <string>Installs Hermes Mobile Companion and Hermes Watch HUD as full-screen native apps connected to {hub.lan_ip}:{hub.port}.</string>
+    <key>PayloadDisplayName</key>
+    <string>Hermes AI Native Companion Suite</string>
+    <key>PayloadIdentifier</key>
+    <string>ai.hermes.companion.suite</string>
+    <key>PayloadOrganization</key>
+    <string>Hermes Autonomous Systems</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>8A4E9920-1000-4000-8000-0013EF600442</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>"""
+        return Response(
+            content=mobileconfig_xml.encode("utf-8"),
+            media_type="application/x-apple-aspen-config",
+            headers={"Content-Disposition": 'attachment; filename="Hermes_Native_Apps.mobileconfig"'},
+        )
+
+    @app.get("/api/companion/install/watch_adb.bat")
+    async def download_watch_adb_installer():
+        """
+        Generates a 1-Click Windows Batch Installer for WearOS Smartwatches (Galaxy Watch, Pixel Watch)
+        and Android Smartphones over Wireless ADB. Configures Chrome to treat http://{hub.lan_ip}:{hub.port}
+        as a secure native origin and launches the standalone full-screen HUD on the watch/phone.
+        """
+        from .auth import get_pairing_manager
+        pair_code = get_pairing_manager().create_pairing_code(ttl_seconds=86400 * 30)
+        bat_content = f"""@echo off
+title Hermes Smartwatch & Android Native App Installer
+color 0B
+echo ============================================================================
+echo   HERMES OMNI-MESH: 1-CLICK SMARTWATCH (WEAR OS) ^& ANDROID APP INSTALLER
+echo   Host PC: http://{hub.lan_ip}:{hub.port}
+echo ============================================================================
+echo.
+echo   [HOW TO USE FOR SMARTWATCH (Galaxy Watch / Pixel Watch / Wear OS)]:
+echo   1. On your Watch: Settings -^> Developer Options -^> Enable "ADB Debugging"
+echo   2. Tap "Wireless debugging" on Watch and note the IP:Port (e.g. 10.0.0.95:5555)
+echo   (Or press ENTER to auto-configure your Android Phone at 10.0.0.84:5555)
+echo.
+set /p TARGET_ADDR="Enter Watch or Phone IP:Port [default: 10.0.0.84:5555]: "
+if "%TARGET_ADDR%"=="" set TARGET_ADDR=10.0.0.84:5555
+
+echo.
+echo [*] Connecting to %TARGET_ADDR% via Wireless ADB...
+adb connect %TARGET_ADDR%
+
+echo [*] Whitelisting Hermes Host (http://{hub.lan_ip}:{hub.port}) as a Native Secure Origin...
+adb -s %TARGET_ADDR% shell "echo 'chrome --unsafely-treat-insecure-origin-as-secure=http://{hub.lan_ip}:{hub.port} --no-first-run' > /data/local/tmp/chrome-command-line"
+
+echo.
+set /p DEV_MODE="Is this a Smartwatch (W) or Smartphone (P)? [W/P, default: W]: "
+if /I "%DEV_MODE%"=="P" (
+    echo [*] Launching Hermes Standalone Smartphone App on %TARGET_ADDR%...
+    adb -s %TARGET_ADDR% shell am start -a android.intent.action.VIEW -d "http://{hub.lan_ip}:{hub.port}/phone?pair={pair_code}"
+) else (
+    echo [*] Launching Hermes Standalone Smartwatch HUD on %TARGET_ADDR%...
+    adb -s %TARGET_ADDR% shell am start -a android.intent.action.VIEW -d "http://{hub.lan_ip}:{hub.port}/watch?pair={pair_code}"
+)
+
+echo.
+echo [+] Done! Tap "Add to Home Screen" / "Install App" on your device for permanent icon.
+pause
+"""
+        return Response(
+            content=bat_content.encode("utf-8"),
+            media_type="application/x-bat",
+            headers={"Content-Disposition": 'attachment; filename="Install-Hermes-Watch-And-Phone.bat"'},
+        )
+
+    @app.post("/api/mesh/heartbeat")
+    async def api_mesh_http_heartbeat(request: Request):
+        """Lightweight HTTP keepalive for mobile/watch companions when backgrounded."""
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        dev_id = str(data.get("device_id", ""))
+        if dev_id and dev_id in hub.devices:
+            dev = hub.devices[dev_id]
+            dev.last_seen = time.time()
+            dev.connected = True
+            if "battery" in data and data["battery"] is not None:
+                dev.battery_level = int(data["battery"])
+            if "is_charging" in data and data["is_charging"] is not None:
+                dev.is_charging = bool(data["is_charging"])
+            return JSONResponse(content={"status": "ok", "connected": True, "host_ip": hub.lan_ip})
+        return JSONResponse(content={"status": "ok", "connected": False, "host_ip": hub.lan_ip})
 
     # ── TURNKEY 1-CLICK ONBOARDING & CONNECT HUB ─────────────────────────────
     @app.get("/connect", response_class=HTMLResponse)
@@ -212,8 +392,8 @@ def register_companion_routes(app: FastAPI):
         data = await request.json()
         dev_id = str(data.get("device_id", ""))
         ok = get_pairing_manager().revoke_device(dev_id)
-        if ok and dev_id in hub.active_sockets:
-            await hub.unregister_connection(dev_id)
+        if ok:
+            await hub.unregister_connection(dev_id, immediate=True)
         return JSONResponse(content={"status": "revoked" if ok else "not_found", "device_id": dev_id})
 
     @app.post("/api/mesh/pairing_code")

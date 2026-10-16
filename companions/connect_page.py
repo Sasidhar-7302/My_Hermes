@@ -305,10 +305,14 @@ def render_connect_hub_html(
                     </ul>
                 </div>
                 <div>
-                    <p style="font-size: 11px; color: #a3e635; margin-bottom: 10px;">💡 Tip: Open in Safari/Chrome &rarr; tap <strong>"Add to Home Screen"</strong> for full native app experience.</p>
-                    <div style="display: flex; gap: 8px;">
+                    <p style="font-size: 11px; color: #a3e635; margin-bottom: 8px;">💡 Short URL: <code>http://{lan_ip}:{port}/phone</code> &bull; Tap <strong>"📲 Install"</strong> or <strong>"⛶ App Mode"</strong> inside app for zero-browser-bar native mode.</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                         <a href="{phone_url}" target="_blank" class="btn" style="flex: 1;">📱 Open Mobile App</a>
-                        <button class="btn btn-secondary" onclick="copyText('{phone_url}')">📋 Copy</button>
+                        <button class="btn btn-secondary" onclick="copyText('http://{lan_ip}:{port}/phone')">📋 Copy</button>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <a href="/api/companion/install/ios_app.mobileconfig" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 6px;">🍏 iOS Native App (.mobileconfig)</a>
+                        <a href="/api/companion/install/watch_adb.bat" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 6px;">🤖 Android ADB Installer</a>
                     </div>
                 </div>
             </div>
@@ -323,12 +327,12 @@ def render_connect_hub_html(
                             <div class="card-subtitle">Wear OS, Galaxy Watch, Apple Watch</div>
                         </div>
                     </div>
-                    <p style="font-size: 12px; color: var(--text-muted);">Scan on watch or open from your phone to sync to your wrist:</p>
+                    <p style="font-size: 12px; color: var(--text-muted);">Scan on watch or type short URL <code>{lan_ip}:{port}/watch</code> on wrist:</p>
                     <div class="qr-box">
                         <img src="{watch_qr_b64}" alt="Watch Pairing QR" />
                     </div>
                     <ul class="feature-list">
-                        <li><span>⌚</span> <strong>AMOLED Wrist HUD:</strong> Battery-efficient pitch black UI</li>
+                        <li><span>⌚</span> <strong>AMOLED Wrist HUD:</strong> Battery-efficient pitch black UI (tap clock for fullscreen)</li>
                         <li><span>🎙️</span> <strong>Hold-to-Talk Voice:</strong> Fast desktop command execution</li>
                         <li><span>📳</span> <strong>Physical Wrist Haptics:</strong> Vibrates on task completion</li>
                         <li><span>🚨</span> <strong>Emergency Stop:</strong> Instant global desktop kill switch</li>
@@ -336,9 +340,13 @@ def render_connect_hub_html(
                     </ul>
                 </div>
                 <div>
-                    <div style="display: flex; gap: 8px;">
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                         <a href="{watch_url}" target="_blank" class="btn btn-green" style="flex: 1;">⌚ Open Watch HUD</a>
-                        <button class="btn btn-secondary" onclick="copyText('{watch_url}')">📋 Copy</button>
+                        <button class="btn btn-secondary" onclick="copyText('http://{lan_ip}:{port}/watch')">📋 Copy</button>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <a href="/api/companion/install/watch_adb.bat" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 6px;">⌚ 1-Click Watch ADB Installer (.bat)</a>
+                        <a href="/api/companion/install/ios_app.mobileconfig" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 6px;">🍏 Watch Profile</a>
                     </div>
                 </div>
             </div>

@@ -304,6 +304,16 @@ class OmniMeshHub:
         )
 
         async with self._lock:
+            stale_ids = [
+                old_id for old_id, old_dev in self.devices.items()
+                if old_id != device_id
+                and old_id != "desktop-host"
+                and old_dev.ip_address == client_ip
+                and old_dev.device_type == normalized_type
+                and old_id not in self.active_sockets
+            ]
+            for old_id in stale_ids:
+                self.devices.pop(old_id, None)
             self.devices[device_id] = dev
             self.active_sockets[device_id] = websocket
 
@@ -343,14 +353,43 @@ class OmniMeshHub:
 
         return dev
 
-    async def unregister_connection(self, device_id: str):
-        """Marks a device as disconnected."""
+    async def _delayed_offline_check(self, device_id: str, grace_seconds: float = 120.0):
+        """Allows mobile/watch companions to survive brief app switches or screenshot pauses without flashing OFFLINE."""
+        await asyncio.sleep(grace_seconds)
+        async with self._lock:
+            if device_id in self.active_sockets:
+                return
+            dev = self.devices.get(device_id)
+            if not dev:
+                return
+            if (time.time() - dev.last_seen) < grace_seconds:
+                return
+            dev.connected = False
+
+        log_companion_event("DEVICE_DISCONNECTED", f"Device {device_id} disconnected after standby grace.", device_id=device_id)
+        await self.broadcast_event({
+            "type": "device_left",
+            "device_id": device_id,
+        })
+
+    async def unregister_connection(self, device_id: str, immediate: bool = False):
+        """Marks a device as disconnected (with a 120s standby grace window for real LAN mobile/watch devices)."""
+        is_lan_companion = False
         async with self._lock:
             if device_id in self.active_sockets:
                 del self.active_sockets[device_id]
             if device_id in self.devices:
-                self.devices[device_id].connected = False
-                self.devices[device_id].last_seen = time.time()
+                dev = self.devices[device_id]
+                dev.last_seen = time.time()
+                if not immediate and dev.ip_address not in ("127.0.0.1", "::1", "testclient"):
+                    is_lan_companion = True
+                    dev.connected = True
+                else:
+                    dev.connected = False
+
+        if is_lan_companion:
+            asyncio.create_task(self._delayed_offline_check(device_id, grace_seconds=120.0))
+            return
 
         log_companion_event("DEVICE_DISCONNECTED", f"Device {device_id} disconnected.", device_id=device_id)
         await self.broadcast_event({
