@@ -843,9 +843,179 @@ function initLowPowerGeolocation() {
     }
 }
 
-// Service worker registration
+// ── SLICKDEALS & MULTI-RETAILER DEAL ENGINE (CHINTU PROFILE 1) ────────────
+let mobileDealsLoaded = false;
+
+async function loadMobileHotDeals(force = false) {
+    if (mobileDealsLoaded && !force) return;
+    const listEl = document.getElementById('mobile-deals-list');
+    if (listEl) {
+        listEl.innerHTML = '<div style="text-align:center;padding:18px;color:#38bdf8;font-size:12px;">🔥 Fetching Slickdeals Frontpage, Reddit &amp; DealNews...</div>';
+    }
+    try {
+        const res = await fetch('/api/deals/hot?limit=15');
+        const data = await res.json();
+        const deals = data.deals || [];
+        mobileDealsLoaded = true;
+        renderMobileDeals(deals);
+    } catch (e) {
+        if (listEl) {
+            listEl.innerHTML = `<div style="text-align:center;padding:14px;color:#ef4444;font-size:12px;">Failed to load deals: ${e.message}</div>`;
+        }
+    }
+}
+
+async function searchMobileDeals() {
+    const inp = document.getElementById('mobile-deal-query');
+    const query = inp ? inp.value.trim() : '';
+    if (!query) {
+        return loadMobileHotDeals(true);
+    }
+    const listEl = document.getElementById('mobile-deals-list');
+    if (listEl) {
+        listEl.innerHTML = `<div style="text-align:center;padding:18px;color:#10b981;font-size:12px;">🔍 Searching Slickdeals, Reddit &amp; Retailers for "${query}"...</div>`;
+    }
+    try {
+        const res = await fetch(`/api/deals/search?q=${encodeURIComponent(query)}&use_browser=true`);
+        const data = await res.json();
+        renderMobileDeals(data.deals || []);
+    } catch (e) {
+        if (listEl) {
+            listEl.innerHTML = `<div style="text-align:center;padding:14px;color:#ef4444;font-size:12px;">Search error: ${e.message}</div>`;
+        }
+    }
+}
+
+function quickDealSearch(q) {
+    const inp = document.getElementById('mobile-deal-query');
+    if (inp) inp.value = q;
+    searchMobileDeals();
+}
+
+function renderMobileDeals(deals) {
+    const listEl = document.getElementById('mobile-deals-list');
+    if (!listEl) return;
+    if (!deals || deals.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center;padding:18px;color:var(--text-muted);font-size:12px;">No deals found. Try another keyword.</div>';
+        return;
+    }
+    listEl.innerHTML = deals.slice(0, 15).map(d => {
+        const title = (d.title || 'Deal Offer').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const price = d.price_str || (d.price ? `$${d.price}` : 'Hot Deal');
+        const store = (d.retailer || d.source || 'Slickdeals').replace(/</g, '&lt;');
+        const url = (d.url || 'https://slickdeals.net').replace(/'/g, '%27');
+        const badgeColor = store.toLowerCase().includes('slickdeals') ? '#f59e0b' : (store.toLowerCase().includes('reddit') ? '#fb923c' : '#10b981');
+        return `
+        <div style="background:rgba(15,23,34,0.85);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="font-size:12px;font-weight:700;color:#f8fafc;line-height:1.35;flex:1;">${title}</div>
+                <div style="font-size:13px;font-weight:800;color:#10b981;white-space:nowrap;">${price}</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <span style="font-size:10px;font-weight:700;color:${badgeColor};background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:4px;">${store}</span>
+                <div style="display:flex;gap:6px;">
+                    <button class="action-btn" style="padding:4px 8px;font-size:10px;background:rgba(56,189,248,0.18);border-color:#38bdf8;color:#38bdf8;" onclick="openOnPcChintu('${url}')">🌐 Open in Chintu on PC</button>
+                    <a href="${url}" target="_blank" rel="noopener" class="action-btn" style="padding:4px 8px;font-size:10px;text-decoration:none;">📱 View</a>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function openOnPcChintu(url) {
+    if (!url) return;
+    showToast('🌐 Opening in Chintu Chrome Profile on PC...');
+    try {
+        const res = await fetch('/api/browser/open_chintu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+            showToast('✅ Opened on PC in Chintu Browser!');
+        } else {
+            showToast('Browser status: ' + (data.message || 'sent'));
+        }
+    } catch (e) {
+        showToast('Failed to open on PC: ' + e.message);
+    }
+}
+
+function launchChintuFromInput() {
+    const inp = document.getElementById('chintu-url-input');
+    if (!inp || !inp.value.trim()) return;
+    let val = inp.value.trim();
+    if (!val.startsWith('http://') && !val.startsWith('https://')) {
+        if (val.includes('.') && !val.includes(' ')) {
+            val = 'https://' + val;
+        } else {
+            val = 'https://www.google.com/search?q=' + encodeURIComponent(val);
+        }
+    }
+    openOnPcChintu(val);
+}
+
+// ── PC MEDIA DECK, DEVICE PINGER & SMART SHUTDOWN ─────────────────────────
+async function controlPcMedia(action) {
+    if (navigator.vibrate) navigator.vibrate([25]);
+    try {
+        const res = await fetch('/api/media/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast(`🎛️ PC Media: ${action.replace('_', ' ').toUpperCase()}`);
+        } else {
+            // Fallback to remote key
+            sendRemoteKey(action);
+        }
+    } catch (e) {
+        sendRemoteKey(action);
+    }
+}
+
+async function pingOtherDevice(targetType) {
+    if (navigator.vibrate) navigator.vibrate([40]);
+    showToast(`🔔 Pinging ${targetType}...`);
+    try {
+        const res = await fetch('/api/mesh/ping_device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: targetType })
+        });
+        const data = await res.json();
+        showToast(data.message || `Ping dispatched to ${targetType}`);
+    } catch (e) {
+        showToast('Ping failed: ' + e.message);
+    }
+}
+
+async function toggleMobileSmartShutdown(enable) {
+    if (navigator.vibrate) navigator.vibrate([40]);
+    try {
+        const endpoint = enable ? '/api/shutdown/start' : '/api/shutdown/cancel';
+        const body = enable ? JSON.stringify({ idle_minutes: 15, cpu_threshold: 10.0 }) : '{}';
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+        });
+        const data = await res.json();
+        showToast(enable ? '🌙 Smart Idle Shutdown Armed (15m)' : '⏹️ Smart Shutdown Cancelled');
+    } catch (e) {
+        showToast('Shutdown command error: ' + e.message);
+    }
+}
+
+// Service worker registration with root scope for /phone & /companions/smartphone
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/companions/smartphone/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/companions/smartphone/sw.js', { scope: '/' }).catch(() => {
+        navigator.serviceWorker.register('/companions/smartphone/sw.js').catch(() => {});
+    });
 }
 
 window.onload = () => {
@@ -853,3 +1023,4 @@ window.onload = () => {
     startDesktopActivityPolling();
     initLowPowerGeolocation();
 };
+

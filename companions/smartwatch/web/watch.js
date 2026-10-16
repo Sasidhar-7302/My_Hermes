@@ -586,9 +586,118 @@ function initWatchLocation() {
     } catch (_) {}
 }
 
+// ── WRIST CONTROL DECK (PC MEDIA, FIND PHONE, SLICKDEALS, FULLSCREEN) ─────
+function openWatchDeck() {
+    vibrate([35]);
+    const modal = document.getElementById('deck-modal');
+    if (modal) modal.classList.add('show');
+}
+
+function dismissWatchDeck() {
+    const modal = document.getElementById('deck-modal');
+    if (modal) modal.classList.remove('show');
+}
+
+async function watchMediaControl(action) {
+    vibrate([30]);
+    try {
+        const res = await fetch('/api/media/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action })
+        });
+        const data = await res.json();
+        showWatchToast(`🎛️ ${action.replace('_', ' ')}`);
+    } catch (e) {
+        showWatchToast('Media key sent');
+    }
+}
+
+async function pingPhoneFromWatch() {
+    vibrate([60, 40, 60]);
+    showWatchToast('📱 Ringing Phone...');
+    try {
+        const res = await fetch('/api/mesh/ping_device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: 'smartphone' })
+        });
+        const data = await res.json();
+        showWatchToast('🔔 Phone Chime Active!');
+    } catch (e) {
+        showWatchToast('Ping dispatched');
+    }
+}
+
+async function loadWatchHotDeals() {
+    vibrate([35]);
+    const box = document.getElementById('watch-deals-box');
+    if (!box) return;
+    box.style.display = 'flex';
+    box.innerHTML = '<div style="font-size:10px;color:#38bdf8;text-align:center;padding:6px;">🔥 Loading Slickdeals...</div>';
+    try {
+        const res = await fetch('/api/deals/hot?limit=5');
+        const data = await res.json();
+        const deals = data.deals || [];
+        if (!deals.length) {
+            box.innerHTML = '<div style="font-size:10px;color:#94a3b8;text-align:center;">No hot deals right now.</div>';
+            return;
+        }
+        box.innerHTML = deals.slice(0, 5).map(d => {
+            const title = (d.title || 'Deal').replace(/</g, '&lt;').substring(0, 38);
+            const price = d.price_str || (d.price ? `$${d.price}` : 'Deal');
+            const url = (d.url || 'https://slickdeals.net').replace(/'/g, '%27');
+            return `<div onclick="openWatchDealOnPc('${url}')" style="background:#0a1017;border:1px solid #1e293b;border-radius:6px;padding:5px 6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:4px;">
+                <span style="font-size:9px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${title}</span>
+                <span style="font-size:9px;font-weight:800;color:#10b981;white-space:nowrap;">${price} 🌐</span>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        box.innerHTML = '<div style="font-size:10px;color:#ef4444;text-align:center;">Error loading deals</div>';
+    }
+}
+
+async function openWatchDealOnPc(url) {
+    vibrate([50]);
+    showWatchToast('🌐 Opening on PC...');
+    try {
+        await fetch('/api/browser/open_chintu', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        });
+        showWatchToast('✅ Opened in Chintu!');
+    } catch (_) {
+        showWatchToast('Sent to PC');
+    }
+}
+
+async function toggleWatchFullscreen() {
+    vibrate([30]);
+    try {
+        if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            showWatchToast('⛶ Full-Screen Active');
+        } else {
+            await document.exitFullscreen();
+            showWatchToast('Exited Full-Screen');
+        }
+    } catch (_) {
+        showWatchToast('Tap Add to Home Screen');
+    }
+}
+
+// Register root-scoped Service Worker for Wear OS / Watch PWA installation
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/companions/smartwatch/sw.js', { scope: '/' }).catch(() => {
+        navigator.serviceWorker.register('/companions/smartwatch/sw.js').catch(() => {});
+    });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     connectWatch();
     setupVoiceEventListeners();
     initWatchLocation();
     setInterval(sendWatchHudTelemetry, 20000);
 });
+

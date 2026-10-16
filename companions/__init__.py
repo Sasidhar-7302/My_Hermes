@@ -50,6 +50,51 @@ def register_companion_routes(app: FastAPI):
     """Registers all standalone companion routes and WebSocket endpoints onto FastAPI app."""
     hub = get_omni_mesh_hub()
 
+    # ── PWA PNG ICONS & ROOT SERVICE WORKER (ANDROID / WEAR OS WEBAPK) ──────
+    def _generate_hermes_png_icon(size: int = 192) -> bytes:
+        import io
+        try:
+            from PIL import Image, ImageDraw
+            img = Image.new("RGBA", (size, size), (6, 9, 12, 255))
+            draw = ImageDraw.Draw(img)
+            pad = max(8, size // 12)
+            draw.ellipse([pad, pad, size - pad, size - pad], fill=(5, 46, 36, 255), outline=(16, 185, 129, 255), width=max(4, size // 32))
+            # Lightning bolt polygon
+            cx, cy = size // 2, size // 2
+            r = size // 3
+            bolt = [
+                (cx + r * 0.15, cy - r),
+                (cx - r * 0.55, cy + r * 0.08),
+                (cx - r * 0.05, cy + r * 0.08),
+                (cx - r * 0.20, cy + r),
+                (cx + r * 0.55, cy - r * 0.08),
+                (cx + r * 0.05, cy - r * 0.08),
+            ]
+            draw.polygon(bolt, fill=(16, 185, 129, 255))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception:
+            import base64
+            return base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+    @app.get("/companions/icon-192.png")
+    async def get_hermes_icon_192():
+        return Response(content=_generate_hermes_png_icon(192), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.get("/companions/icon-512.png")
+    async def get_hermes_icon_512():
+        return Response(content=_generate_hermes_png_icon(512), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    @app.get("/sw.js")
+    @app.get("/companions/smartwatch/sw.js")
+    async def get_root_sw_route():
+        return Response(
+            content=get_smartphone_sw(),
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
+
     # ── SMARTWATCH ROUTES (+ SHORT WRIST ALIASES) ───────────────────────────
     @app.get("/companions/smartwatch", response_class=HTMLResponse)
     @app.get("/companion/smartwatch", response_class=HTMLResponse)
@@ -89,7 +134,11 @@ def register_companion_routes(app: FastAPI):
 
     @app.get("/companions/smartphone/sw.js")
     async def get_smartphone_sw_route():
-        return Response(content=get_smartphone_sw(), media_type="application/javascript")
+        return Response(
+            content=get_smartphone_sw(),
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
 
     @app.get("/companions/smartphone/web/mobile.css")
     async def get_smartphone_css():
@@ -138,7 +187,11 @@ def register_companion_routes(app: FastAPI):
 
     @app.get("/companion/sw.js")
     async def get_companion_sw():
-        return Response(content=get_smartphone_sw(), media_type="application/javascript")
+        return Response(
+            content=get_smartphone_sw(),
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
 
     # ── STANDALONE NATIVE APP INSTALLERS (MOBILE & WATCH) ──────────────────
     @app.get("/api/companion/install/ios_app.mobileconfig")

@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hermes Watch HUD</title>
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/companions/smartwatch/manifest.json">
+    <link rel="apple-touch-icon" href="/companions/icon-192.png">
+    <link rel="icon" type="image/png" href="/companions/icon-192.png">
     <link rel="stylesheet" href="/companions/smartwatch/web/watch.css">
 </head>
 <body>
@@ -53,6 +58,10 @@
                 <span class="chip-icon">🖥️</span>
                 <span class="chip-label">Peek</span>
             </button>
+            <button class="action-chip" onclick="openWatchDeck()" title="Wrist Control Deck (Media, Find Phone, Deals)">
+                <span class="chip-icon">🎛️</span>
+                <span class="chip-label">Deck</span>
+            </button>
             <button class="action-chip" onclick="wakePcFromWatch()" title="Wake PC (WoL)">
                 <span class="chip-icon">⚡</span>
                 <span class="chip-label">Wake</span>
@@ -61,6 +70,32 @@
                 <span class="chip-icon">🚨</span>
                 <span class="chip-label">Stop</span>
             </button>
+        </div>
+
+        <!-- Slide-up Wrist Control Deck Modal (PC Media, Find Phone, Slickdeals, Fullscreen) -->
+        <div id="deck-modal" class="reply-modal" onclick="dismissWatchDeck()">
+            <div class="modal-card" style="padding: 10px; max-height: 90%; overflow-y: auto;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span class="modal-tag">🎛️ WRIST DECK</span>
+                    <span class="modal-close" onclick="dismissWatchDeck()">&times;</span>
+                </div>
+                <!-- PC Media & Volume Bar -->
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 8px;">
+                    <button onclick="watchMediaControl('mute')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">🔇</button>
+                    <button onclick="watchMediaControl('volume_down')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">🔉</button>
+                    <button onclick="watchMediaControl('play_pause')" style="background:rgba(16,185,129,0.22);border:1px solid #10b981;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">⏯️</button>
+                    <button onclick="watchMediaControl('volume_up')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">🔊</button>
+                    <button onclick="watchMediaControl('next')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">⏭️</button>
+                </div>
+                <!-- Quick Actions Row: Find Phone, Top Deals, Fullscreen -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px;">
+                    <button onclick="pingPhoneFromWatch()" style="background:rgba(56,189,248,0.18);border:1px solid #38bdf8;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:700;color:#e0f2fe;cursor:pointer;">📱 Find Phone</button>
+                    <button onclick="loadWatchHotDeals()" style="background:rgba(245,158,11,0.18);border:1px solid #f59e0b;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:700;color:#fef3c7;cursor:pointer;">🔥 Slickdeals</button>
+                </div>
+                <button onclick="toggleWatchFullscreen()" style="width:100%;background:rgba(16,185,129,0.15);border:1px solid #10b981;border-radius:8px;padding:6px;font-size:10px;font-weight:700;color:#10b981;cursor:pointer;margin-bottom:6px;">⛶ Full-Screen Wrist App Mode</button>
+                <!-- Compact Deals List on Wrist -->
+                <div id="watch-deals-box" style="display:none;flex-direction:column;gap:4px;max-height:95px;overflow-y:auto;text-align:left;"></div>
+            </div>
         </div>
 
         <!-- Slide-up Desktop Screen Peek Modal (Watch Hermes Work) -->

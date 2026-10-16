@@ -1,16 +1,25 @@
 {
-  "name": "Hermes Phone Companion",
-  "short_name": "Hermes Phone",
-  "start_url": "/companions/smartphone",
+  "name": "Hermes AI Mobile Companion",
+  "short_name": "Hermes AI",
+  "description": "Autonomous AI Companion: Voice, Desktop Screen Mirror, Slickdeals, & Power Control",
+  "start_url": "/phone",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#070a0d",
+  "background_color": "#06090c",
   "theme_color": "#10b981",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23059669'/><path d='M30 50 L50 25 L70 50 L50 75 Z' fill='%23ffffff'/></svg>",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml"
+      "src": "/companions/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/companions/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

@@ -8,6 +8,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Hermes Smartphone Companion</title>
     <link rel="manifest" href="/companions/smartphone/manifest.json">
+    <link rel="apple-touch-icon" href="/companions/icon-192.png">
+    <link rel="icon" type="image/png" href="/companions/icon-192.png">
     <link rel="stylesheet" href="/companions/smartphone/web/mobile.css">
 </head>
 <body>
@@ -39,7 +41,7 @@
             </div>
         </div>
 
-        <!-- Sleek Segmented Tab Selector -->
+        <!-- Sleek Segmented Tab Selector (5 Complete Feature Tabs) -->
         <div class="tab-nav">
             <button class="tab-btn active" id="tab-btn-assistant" onclick="switchTab('assistant')">
                 <span class="tab-icon">💬</span>
@@ -51,7 +53,11 @@
             </button>
             <button class="tab-btn" id="tab-btn-phone-screen" onclick="switchTab('phone-screen')">
                 <span class="tab-icon">📱</span>
-                <span>Phone Screen</span>
+                <span>My Screen</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-deals" onclick="switchTab('deals'); loadMobileHotDeals();">
+                <span class="tab-icon">🛍️</span>
+                <span>Deals</span>
             </button>
             <button class="tab-btn" id="tab-btn-power-hub" onclick="switchTab('power-hub')">
                 <span class="tab-icon">⚡</span>
@@ -73,8 +79,9 @@
                 <!-- Quick Suggestion Chips -->
                 <div class="quick-chip-row">
                     <button class="quick-chip" onclick="askAboutMobileScreen()">👀 What's on my phone screen?</button>
-                    <button class="quick-chip" onclick="switchTab('pc-screen')">📺 Watch Hermes Work on PC</button>
-                    <button class="quick-chip" onclick="pullClipboard()">📋 Sync Clipboard</button>
+                    <button class="quick-chip" onclick="switchTab('deals'); loadMobileHotDeals();">🔥 Slickdeals &amp; Offers</button>
+                    <button class="quick-chip" onclick="switchTab('pc-screen')">📺 Watch PC</button>
+                    <button class="quick-chip" onclick="pullClipboard()">📋 Sync Clip</button>
                 </div>
             </div>
 
@@ -82,7 +89,7 @@
             <div class="card" style="flex: 1; padding: 12px;">
                 <div class="chat-stream" id="chat-stream" style="height: 220px;">
                     <div class="msg-bubble hermes">
-                        Connected to Hermes Host PC. Ask questions, dictate tasks, share your screen, or control desktop applications.
+                        Connected to Hermes Host PC. Ask questions, dictate tasks, share your screen, browse Slickdeals, or control desktop applications.
                     </div>
                 </div>
                 <div class="input-bar" style="margin-top: 10px;">
@@ -169,12 +176,96 @@
             </div>
         </div>
 
-        <!-- TAB 4: CONTROL & 24/7 POWER HUB -->
+        <!-- TAB 4: SLICKDEALS & MULTI-RETAILER DEAL ENGINE (CHINTU ISOLATED BROWSER) -->
+        <div class="tab-panel" id="panel-deals">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div class="card-title">🛍️ Slickdeals &amp; Live Deal Finder</div>
+                    <span style="font-size: 10px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 3px 7px; border-radius: 4px;">CHINTU PROFILE 1</span>
+                </div>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+                    Search Slickdeals Frontpage, Reddit (r/buildapcsales &amp; r/deals), DealNews &amp; Retailers. Open any deal on your PC in the isolated Chintu Chrome Profile!
+                </p>
+                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                    <input type="text" id="mobile-deal-query" class="text-input" placeholder="Search deals (e.g. RTX 5090, OLED, SSD)..." onkeydown="if(event.key==='Enter') searchMobileDeals()">
+                    <button class="action-btn" style="padding: 8px 12px; background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981;" onclick="searchMobileDeals()">🔍</button>
+                    <button class="action-btn" style="padding: 8px 10px; background: rgba(245,158,11,0.2); border-color: #f59e0b; color: #fbbf24;" onclick="loadMobileHotDeals(true)" title="Frontpage Hot Deals">🔥 Hot</button>
+                </div>
+                <!-- Quick Category Filter Chips -->
+                <div class="quick-chip-row" style="margin-bottom: 10px; justify-content: flex-start;">
+                    <button class="quick-chip" onclick="quickDealSearch('RTX GPU')">🎮 GPUs</button>
+                    <button class="quick-chip" onclick="quickDealSearch('OLED Monitor')">🖥️ Monitors</button>
+                    <button class="quick-chip" onclick="quickDealSearch('NVMe SSD')">💾 SSDs</button>
+                    <button class="quick-chip" onclick="quickDealSearch('Laptop')">💻 Laptops</button>
+                    <button class="quick-chip" onclick="openOnPcChintu('https://slickdeals.net')">🌐 Slickdeals on PC</button>
+                </div>
+                <div id="mobile-deals-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto;">
+                    <div style="text-align: center; padding: 18px; color: var(--text-muted); font-size: 12px;">
+                        Tap 🔥 Hot or search above to fetch live deals...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: CONTROL DECK, MEDIA, CHINTU BROWSER & 24/7 POWER HUB -->
         <div class="tab-panel" id="panel-power-hub">
+            <!-- PC Media & Volume Control Deck -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="card-title">🎛️ PC Media &amp; Audio Control Deck</div>
+                    <span style="font-size: 10px; color: var(--accent-emerald); font-weight: 700;">INSTANT OS KEYS</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px;">
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px;" onclick="controlPcMedia('mute')">🔇 Mute</button>
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px;" onclick="controlPcMedia('volume_down')">🔉 Vol -</button>
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px;" onclick="controlPcMedia('volume_up')">🔊 Vol +</button>
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px;" onclick="controlPcMedia('prev')">⏮️ Prev</button>
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px; background: rgba(16,185,129,0.18); border-color: #10b981; color: #fff;" onclick="controlPcMedia('play_pause')">⏯️ Play/Pause</button>
+                    <button class="action-btn" style="padding: 10px 6px; font-size: 11px;" onclick="controlPcMedia('next')">⏭️ Next</button>
+                </div>
+            </div>
+
+            <!-- Remote Chintu Browser Launcher (PC Profile 1) -->
+            <div class="card" style="border-color: rgba(56,189,248,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="card-title">🌐 Open in Chintu Browser on PC</div>
+                    <span style="font-size: 10px; color: #38bdf8; font-weight: 700;">ISOLATED PROFILE 1</span>
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <input type="text" id="chintu-url-input" class="text-input" placeholder="https://slickdeals.net or search..." onkeydown="if(event.key==='Enter') launchChintuFromInput()">
+                    <button class="action-btn" style="padding: 8px 12px; background: rgba(56,189,248,0.2); border-color: #38bdf8; color: #38bdf8;" onclick="launchChintuFromInput()">🚀 Open</button>
+                </div>
+                <div class="quick-chip-row" style="margin-top: 8px; justify-content: flex-start;">
+                    <button class="quick-chip" onclick="openOnPcChintu('https://slickdeals.net')">🔥 Slickdeals</button>
+                    <button class="quick-chip" onclick="openOnPcChintu('https://www.youtube.com')">📺 YouTube</button>
+                    <button class="quick-chip" onclick="openOnPcChintu('https://www.reddit.com/r/buildapcsales/')">👽 r/buildapcsales</button>
+                    <button class="quick-chip" onclick="openOnPcChintu('https://github.com')">🐙 GitHub</button>
+                </div>
+            </div>
+
+            <!-- Find My Devices & Smart Idle Shutdown -->
+            <div class="card">
+                <div class="card-title">🔔 Find Devices &amp; Smart Shutdown</div>
+                <div class="btn-grid" style="margin-top: 6px;">
+                    <button class="action-btn" style="font-size: 11px;" onclick="pingOtherDevice('smartwatch')">
+                        <span>⌚ Ping My Watch</span>
+                    </button>
+                    <button class="action-btn" style="font-size: 11px;" onclick="pingOtherDevice('laptop')">
+                        <span>💻 Ping My Laptop</span>
+                    </button>
+                    <button class="action-btn" style="font-size: 11px; background: rgba(245,158,11,0.15); border-color: #f59e0b; color: #fbbf24;" onclick="toggleMobileSmartShutdown(true)">
+                        <span>🌙 Arm Smart Shutdown</span>
+                    </button>
+                    <button class="action-btn" style="font-size: 11px;" onclick="toggleMobileSmartShutdown(false)">
+                        <span>⏹️ Cancel Shutdown</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- 24/7 Host Power & Wake-on-LAN -->
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div class="card-title">⚡ Host Power & Wake-on-LAN</div>
+                    <div class="card-title">⚡ Host Power &amp; Wake-on-LAN</div>
                     <span id="power-status-tag" style="font-size: 10px; font-weight: 700; color: var(--accent-emerald); background: var(--accent-emerald-dim); padding: 3px 8px; border-radius: 4px;">AWAKE 24/7</span>
                 </div>
                 <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
@@ -201,7 +292,7 @@
 
             <!-- Standalone Native App & Smartwatch Download Hub -->
             <div class="card" style="border-color: rgba(56,189,248,0.35);">
-                <div class="card-title">📲 Standalone Native App & Watch Install</div>
+                <div class="card-title">📲 Standalone Native App &amp; Watch Install</div>
                 <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
                     Run Hermes without any browser URL bar on your Mobile Phone or Smartwatch:
                 </p>
