@@ -435,7 +435,7 @@ async def api_roster_skill(role: str):
 
 @app.post("/api/roster/dispatch")
 async def api_roster_dispatch(request: Request):
-    """Dispatches a task to a Team Roster specialist (or AUTO via Laya) with SKILL.md + live domain tools + 3-strike Never-Give-Up loop."""
+    """Dispatches a task to a Team Roster specialist (or AUTO via Laya) with SKILL.md + live domain tools + 3-strike Never-Give-Up loop + step-by-step trace."""
     import asyncio
     data = await request.json()
     task = (data.get("task") or "").strip()
@@ -451,6 +451,17 @@ async def api_roster_dispatch(request: Request):
     forced = None if role in ("", "AUTO") else role
     res = await asyncio.to_thread(dispatch_task, task, forced)
     return JSONResponse(content=res)
+
+
+@app.get("/api/roster/step_logs")
+async def api_roster_step_logs(role: str = "ALL", limit: int = 50):
+    """Returns granular step-by-step execution traces from role_tasks.json and ~/.hermes/logs/hermes_roster_steps.jsonl."""
+    try:
+        from local_model_lab.agent_dispatcher import get_recent_step_logs
+    except ImportError:
+        from agent_dispatcher import get_recent_step_logs
+    return JSONResponse(content=get_recent_step_logs(role=role, limit=int(limit)))
+
 
 
 @app.get("/api/desktop/monitors")
@@ -2175,6 +2186,8 @@ def dashboard():
                     <div id="roster-res-header" style="font-size: 13px; font-weight: 800; color: #10b981;">Dispatched</div>
                     <div id="roster-res-meta" style="font-size: 11px; color: #38bdf8; font-family: monospace;"></div>
                 </div>
+                <!-- Step-by-Step Execution Trace Timeline -->
+                <div id="roster-res-steps" style="display: none; margin-bottom: 10px; padding: 10px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.28); border-radius: 6px;"></div>
                 <pre id="roster-res-body" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.55; color: var(--text-main); max-height: 360px; overflow-y: auto; margin: 0; font-family: inherit;"></pre>
             </div>
         </div>
@@ -2318,7 +2331,7 @@ def dashboard():
 
                 <div class="emp-logs-accordion">
                     <button class="btn-toggle-logs" onclick="toggleEmpLogs('{role_name}')">
-                        <span>📜 Activity Log ({len(get_employee_logs(role_name))})</span>
+                        <span>📜 Activity &amp; Step Logs ({len(get_employee_logs(role_name))})</span>
                         <span id="arrow-{role_name}">▼</span>
                     </button>
                     <div id="logs-{role_name}" class="emp-logs-panel" style="display: none;">
@@ -2334,7 +2347,27 @@ def dashboard():
                 rsp = item.get("response", "")
                 tools_u = ", ".join(item.get("tools_used", []))
                 strikes_u = item.get("strikes_used", 1)
+                steps_list = item.get("steps", [])
+                trace_id = item.get("trace_id", "")
                 extra_badge = f" &bull; Strike {strikes_u}" + (f" &bull; Tools: {tools_u}" if tools_u else "")
+                steps_html = ""
+                if steps_list:
+                    rows = []
+                    for s in steps_list:
+                        st_code = s.get("status", "OK")
+                        st_col = "#10b981" if st_code == "OK" else ("#f59e0b" if st_code in ("WARN", "INFO") else "#ef4444")
+                        rows.append(
+                            f'<div style="font-size:10px;font-family:monospace;padding:3px 6px;border-left:2px solid {st_col};background:rgba(0,0,0,0.28);margin-bottom:3px;">'
+                            f'<strong style="color:{st_col};">[Step {s.get("step_num", "?")} &bull; {st_code} &bull; {s.get("duration_ms", 0)}ms]</strong> '
+                            f'<span style="color:#e2e8f0;font-weight:700;">{s.get("title", "")}</span> — '
+                            f'<span style="color:#94a3b8;">{s.get("detail", "")}</span></div>'
+                        )
+                    steps_html = (
+                        f'<details style="margin:5px 0;background:rgba(15,23,42,0.65);border:1px solid rgba(56,189,248,0.25);border-radius:4px;padding:5px 8px;">'
+                        f'<summary style="cursor:pointer;font-size:10px;font-weight:700;color:#38bdf8;">'
+                        f'🔍 Step-by-Step Execution Trace ({len(steps_list)} steps{f" • {trace_id}" if trace_id else ""})</summary>'
+                        f'<div style="margin-top:6px;">{"".join(rows)}</div></details>'
+                    )
                 html += f"""
                         <div class="emp-log-item">
                             <div class="emp-log-top">
@@ -2342,6 +2375,7 @@ def dashboard():
                                 <span style="color: var(--accent-green);">{lat}ms &bull; {mdl}{extra_badge}</span>
                             </div>
                             <div class="emp-log-task"><strong>Task:</strong> {tsk}</div>
+                            {steps_html}
                             <div class="emp-log-resp">{rsp}</div>
                         </div>
                 """
@@ -3316,8 +3350,25 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         </div>
     </div>
 
-    <!-- TAB 11: AUDIT TRAIL -->
+    <!-- TAB 11: AUDIT TRAIL & STEP-BY-STEP EXECUTION LOGS -->
     <div id="tab-logs" class="tab-panel">
+        <!-- Live Step-by-Step JSONL Trace Stream Panel -->
+        <div class="panel-container" style="margin-bottom: 16px; border: 1px solid rgba(56, 189, 248, 0.35);">
+            <div class="panel-header" style="margin-bottom: 10px;">
+                <div>
+                    <h2 class="panel-title">🔍 Live Step-by-Step Execution Trace Stream (JSONL &amp; Forensic Audit)</h2>
+                    <p class="panel-desc">Every individual step (Security Preflight, Laya System-1 Routing, SKILL.md Load, Live Domain Tool Calls, Strike 1/2/3 Model Attempts, Verification Gate) is recorded with millisecond timing.</p>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span id="step-log-file-badge" style="font-size: 10px; font-family: monospace; color: #38bdf8; background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); padding: 4px 8px; border-radius: 6px;">~/.hermes/logs/hermes_roster_steps.jsonl</span>
+                    <button class="btn-action" onclick="refreshStepLogsStream()">&circlearrowright; Refresh Step Logs</button>
+                </div>
+            </div>
+            <div id="live-jsonl-step-stream" style="background: #050a0e; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; max-height: 220px; overflow-y: auto; line-height: 1.55; color: #cbd5e1;">
+                Click "Refresh Step Logs" or switch to this tab to load the live step-by-step JSONL execution stream.
+            </div>
+        </div>
+
         <div class="filter-bar">
             <div class="filter-chips">
 """
@@ -3335,9 +3386,9 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
     html += f"""
                 {chips_html}
             </div>
-            <input type="text" class="search-input" id="log-search" placeholder="Search prompts, models, outputs..." onkeyup="searchLogs()" />
+            <input type="text" class="search-input" id="log-search" placeholder="Search prompts, steps, tools, models, outputs..." onkeyup="searchLogs()" />
         </div>
-        <div class="logs-stream">
+        <div class="logs-stream" id="audit-tasks-stream">
     """
 
     if not tasks:
@@ -3351,12 +3402,37 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             timestamp = t.get("timestamp", "")[:19].replace("T", " ")
             role = t.get("role", "SYSTEM")
             meta = ROLE_META.get(role, {"icon": "🤖"})
+            skill_b = t.get("skill_id", "")
+            strikes_b = t.get("strikes_used", 1)
+            tools_b = ", ".join(t.get("tools_used", []))
+            steps_arr = t.get("steps", [])
+            trace_id_b = t.get("trace_id", "")
+            steps_audit_html = ""
+            if steps_arr:
+                s_rows = []
+                for s in steps_arr:
+                    st_c = s.get("status", "OK")
+                    col = "#10b981" if st_c == "OK" else ("#f59e0b" if st_c in ("WARN", "INFO") else "#ef4444")
+                    s_rows.append(
+                        f'<div style="font-size:11px;font-family:monospace;padding:4px 8px;border-left:3px solid {col};background:rgba(0,0,0,0.35);margin-bottom:4px;border-radius:0 4px 4px 0;">'
+                        f'<span style="color:{col};font-weight:700;">[Step {s.get("step_num", "?")} &bull; {st_c} &bull; +{s.get("elapsed_ms", 0)}ms ({s.get("duration_ms", 0)}ms)]</span> '
+                        f'<strong style="color:#f8fafc;">{s.get("title", "")}</strong> &rarr; '
+                        f'<span style="color:#cbd5e1;">{s.get("detail", "")}</span></div>'
+                    )
+                steps_audit_html = (
+                    f'<div style="margin:6px 0;padding:8px 10px;background:rgba(15,23,42,0.75);border:1px solid rgba(56,189,248,0.28);border-radius:6px;">'
+                    f'<div style="font-size:11px;font-weight:800;color:#38bdf8;margin-bottom:6px;">🔍 Step-by-Step Execution Timeline ({len(steps_arr)} Steps{f" • Trace: {trace_id_b}" if trace_id_b else ""})</div>'
+                    f'{"".join(s_rows)}</div>'
+                )
             html += f"""
             <div class="log-entry" data-role="{role}">
                 <div class="log-header">
                     <div class="log-role-tag">
                         <span>{meta['icon']}</span>
                         <span>{role} &bull; {t.get('model', 'Model')}</span>
+                        {f'<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.14);color:#38bdf8;">{skill_b}</span>' if skill_b else ''}
+                        <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.14);color:#10b981;">Strike {strikes_b}/3</span>
+                        {f'<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(168,85,247,0.14);color:#e9d5ff;">Tools: {tools_b}</span>' if tools_b else ''}
                     </div>
                     <div class="log-metrics">
                         <span>{timestamp}</span>
@@ -3364,6 +3440,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                     </div>
                 </div>
                 <div class="log-prompt"><strong>Prompt:</strong> {t.get('task', '')}</div>
+                {steps_audit_html}
                 <div class="log-output">{t.get('response', '')}</div>
             </div>
             """
@@ -3489,6 +3566,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (tabId === 'mesh') refreshMeshDevices();
             if (tabId === 'rpa') refreshMacros();
             if (tabId === 'system') refreshSystemHealth();
+            if (tabId === 'logs') refreshStepLogsStream();
         }
 
         function toggleEmpLogs(role) {
@@ -3510,6 +3588,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
             applyFilters();
+            refreshStepLogsStream(role);
         }
 
         function searchLogs() {
@@ -3526,6 +3605,63 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 const searchMatch = !query || text.includes(query);
                 entry.style.display = (roleMatch && searchMatch) ? 'flex' : 'none';
             });
+        }
+
+        function renderStepsHtml(steps, traceId) {
+            if (!steps || !steps.length) return '';
+            const rows = steps.map(s => {
+                const st = s.status || 'OK';
+                const col = st === 'OK' ? '#10b981' : ((st === 'WARN' || st === 'INFO') ? '#f59e0b' : '#ef4444');
+                return `<div style="font-size:11px;font-family:monospace;padding:4px 8px;border-left:3px solid ${col};background:rgba(0,0,0,0.35);margin-bottom:4px;border-radius:0 4px 4px 0;">
+                    <span style="color:${col};font-weight:700;">[Step ${s.step_num || '?'} &bull; ${st} &bull; +${s.elapsed_ms || 0}ms (${s.duration_ms || 0}ms)]</span>
+                    <strong style="color:#f8fafc;">${s.title || ''}</strong> &rarr;
+                    <span style="color:#cbd5e1;">${s.detail || ''}</span>
+                </div>`;
+            }).join('');
+            return `<div style="font-size:11px;font-weight:800;color:#38bdf8;margin-bottom:6px;">🔍 Step-by-Step Execution Timeline (${steps.length} Steps Logged${traceId ? ' • Trace: ' + traceId : ''})</div>${rows}`;
+        }
+
+        async function refreshStepLogsStream(roleFilter) {
+            const streamEl = document.getElementById('live-jsonl-step-stream');
+            const badgeEl = document.getElementById('step-log-file-badge');
+            const r = roleFilter || currentFilter || 'ALL';
+            try {
+                const res = await fetch('/api/roster/step_logs?role=' + encodeURIComponent(r) + '&limit=50');
+                const data = await res.json();
+                if (badgeEl && data.log_files) {
+                    const kb = ((data.log_files.steps_jsonl_bytes || 0) / 1024).toFixed(1);
+                    badgeEl.innerText = `${data.log_files.steps_jsonl} (${kb} KB)`;
+                }
+                if (streamEl) {
+                    const evs = data.jsonl_events || [];
+                    if (!evs.length) {
+                        streamEl.innerHTML = '<span style="color:var(--text-muted);">No step events recorded yet for this filter. Dispatch a task to see live step-by-step logs.</span>';
+                    } else {
+                        streamEl.innerHTML = evs.map(ev => {
+                            const ts = (ev.timestamp || '').slice(11, 19);
+                            const roleTag = ev.role || 'ROSTER';
+                            if (ev.event_type === 'MISSION_COMPLETE') {
+                                return `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#10b981;">
+                                    <span style="color:#64748b;">[${ts}]</span> <strong>[MISSION_COMPLETE]</strong>
+                                    <span style="color:#38bdf8;">[${roleTag}]</span>
+                                    Trace: <code>${ev.trace_id || ''}</code> &bull; Model: ${ev.model || ''} &bull; Steps: ${ev.steps_count || 0} &bull; Total: ${ev.latency_ms || 0}ms
+                                </div>`;
+                            }
+                            const st = ev.status || 'OK';
+                            const col = st === 'OK' ? '#10b981' : ((st === 'WARN' || st === 'INFO') ? '#f59e0b' : '#ef4444');
+                            return `<div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                                <span style="color:#64748b;">[${ts}]</span>
+                                <span style="color:${col};font-weight:700;">[STEP ${String(ev.step_num || 0).padStart(2, '0')} | ${st} | ${ev.duration_ms || 0}ms]</span>
+                                <span style="color:#38bdf8;font-weight:700;">[${roleTag}]</span>
+                                <strong style="color:#e2e8f0;">${ev.title || ev.phase || ''}</strong> &rarr;
+                                <span style="color:#94a3b8;">${ev.detail || ''}</span>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (e) {
+                if (streamEl) streamEl.innerText = 'Error loading step logs: ' + e;
+            }
         }
 
         async function updateSoul(role) {
@@ -3579,6 +3715,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             const resBox = document.getElementById('roster-dispatch-result');
             const resHeader = document.getElementById('roster-res-header');
             const resMeta = document.getElementById('roster-res-meta');
+            const resSteps = document.getElementById('roster-res-steps');
             const resBody = document.getElementById('roster-res-body');
 
             const role = sel ? sel.value : 'AUTO';
@@ -3590,11 +3727,15 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
 
             if (btn) {
                 btn.disabled = true;
-                btn.innerText = '⏳ Executing (3-Strike Loop)...';
+                btn.innerText = '⏳ Executing (Logging All Steps)...';
             }
             if (resBox) resBox.style.display = 'block';
             if (resHeader) resHeader.innerText = `⚡ Dispatching to ${role === 'AUTO' ? 'Laya System-1 Auto-Router' : role}...`;
-            if (resMeta) resMeta.innerText = 'Loading SKILL.md + Running Scoped Domain Tools...';
+            if (resMeta) resMeta.innerText = 'Step 1: Security Preflight → Step 2: Laya Routing → Step 3: SKILL.md Load → Step 4: Live Tools → Step 5: 3-Strike Loop...';
+            if (resSteps) {
+                resSteps.style.display = 'none';
+                resSteps.innerHTML = '';
+            }
             if (resBody) resBody.innerText = 'Executing pre-flight domain tools and specialist model cascade...';
 
             try {
@@ -3605,16 +3746,21 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
                 });
                 const data = await res.json();
                 const toolsStr = (data.tools_used && data.tools_used.length) ? data.tools_used.join(', ') : 'domain-context';
+                const stepsCount = (data.steps && data.steps.length) ? data.steps.length : 0;
                 if (resHeader) {
-                    resHeader.innerText = `✅ Completed by ${data.role || role} (Skill: ${data.skill_id || 'active'})`;
+                    resHeader.innerText = `✅ Completed by ${data.role || role} (Skill: ${data.skill_id || 'active'} • ${stepsCount} Steps Logged)`;
                 }
                 if (resMeta) {
-                    resMeta.innerText = `Model: ${data.model || 'verified'} • Latency: ${data.latency_ms || 0}ms • Strike: ${data.strikes_used || 1}/3 • Tools: [${toolsStr}]`;
+                    resMeta.innerText = `Trace: ${data.trace_id || 'logged'} • Model: ${data.model || 'verified'} • Latency: ${data.latency_ms || 0}ms • Strike: ${data.strikes_used || 1}/3 • Tools: [${toolsStr}]`;
+                }
+                if (resSteps && data.steps && data.steps.length) {
+                    resSteps.style.display = 'block';
+                    resSteps.innerHTML = renderStepsHtml(data.steps, data.trace_id);
                 }
                 if (resBody) {
                     resBody.innerText = data.response || JSON.stringify(data, null, 2);
                 }
-                showToast(`${data.role || role} completed mission!`);
+                showToast(`${data.role || role} completed mission (${stepsCount} steps logged)!`);
             } catch (e) {
                 if (resHeader) resHeader.innerText = '❌ Dispatch Error';
                 if (resBody) resBody.innerText = String(e);
