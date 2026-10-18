@@ -155,6 +155,28 @@ DOMAIN_RULES = {
             ("keyboard", 3), ("mouse", 3), ("gui", 3), ("screen", 2), ("screenshot", 3),
             ("focus", 3), ("paper", 4)
         ]
+    },
+    "RESEARCHER": {
+        "phrases": [
+            ("deep research", 6), ("literature review", 6), ("arxiv paper", 6), ("arxiv papers", 6),
+            ("scientific literature", 6), ("slickdeals frontpage", 6), ("compare prices across", 6),
+            ("fact check", 5), ("cite sources", 5), ("research report", 5), ("academic papers", 5),
+            ("search slickdeals", 6), ("reddit buildapcsales", 6)
+        ],
+        "keywords": [
+            ("arxiv", 5), ("pubmed", 5), ("openalex", 5), ("slickdeals", 5), ("literature", 4),
+            ("citations", 4), ("bibliography", 4)
+        ]
+    },
+    "DESIGNER": {
+        "phrases": [
+            ("glassmorphic ui", 6), ("amoled hud", 6), ("color palette", 5), ("typography scale", 5),
+            ("wcag contrast", 6), ("css design tokens", 6), ("figma mockup", 5), ("wireframe layout", 5),
+            ("watch face ui", 6), ("companion ui design", 6), ("dark mode theme", 5)
+        ],
+        "keywords": [
+            ("glassmorphism", 5), ("wireframe", 4), ("typography", 4), ("mockup", 4), ("artboard", 4)
+        ]
     }
 }
 

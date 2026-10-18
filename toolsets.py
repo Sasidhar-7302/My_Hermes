@@ -582,6 +582,60 @@ TOOLSETS = {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
         "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
+    },
+
+    # ==========================================================================
+    # Team Roster Specialist Role Toolsets (Domain-Scoped Tool Access)
+    # ==========================================================================
+    "role_ceo": {
+        "description": "CEO Executive Orchestrator toolset — delegation, memory, kanban coordination, cron, and skill inspection",
+        "tools": ["delegate_task", "memory", "todo", "session_search", "clarify", "cronjob", "skills_list", "skill_view"],
+        "includes": ["kanban"]
+    },
+    "role_pm": {
+        "description": "Principal Product Manager toolset — web discovery, deal/market research, kanban backlog, and specification authoring",
+        "tools": ["web_search", "web_extract", "read_file", "search_files", "todo", "memory", "clarify", "skills_list", "skill_view"],
+        "includes": ["browser", "kanban"]
+    },
+    "role_architect": {
+        "description": "Principal System Architect toolset — codebase reconnaissance, schema/API verification, visual blueprints, and web docs",
+        "tools": ["read_file", "search_files", "execute_code", "vision_analyze", "web_search", "web_extract", "todo", "skills_list", "skill_view"],
+        "includes": []
+    },
+    "role_coder": {
+        "description": "Staff Polyglot Coder toolset — full file manipulation, terminal execution, code verification, and skill management",
+        "tools": ["read_file", "write_file", "patch", "search_files", "terminal", "process", "read_terminal", "close_terminal", "execute_code", "web_search", "web_extract", "skills_list", "skill_view", "skill_manage", "todo"],
+        "includes": []
+    },
+    "role_tester": {
+        "description": "Principal QA & Chaos Tester toolset — test runner terminal, code execution, browser E2E inspection, and vision verification",
+        "tools": ["terminal", "process", "read_terminal", "execute_code", "read_file", "write_file", "patch", "search_files", "vision_analyze", "skills_list", "skill_view"],
+        "includes": ["browser"]
+    },
+    "role_security": {
+        "description": "CISO & Red-Team Security Auditor toolset — static/dynamic code inspection, adversarial probing, and guardrail patching",
+        "tools": ["read_file", "search_files", "terminal", "execute_code", "patch", "web_search", "web_extract", "skills_list", "skill_view"],
+        "includes": []
+    },
+    "role_devops": {
+        "description": "Principal SRE & DevOps toolset — daemon/process management, terminal, IaC file editing, and cron scheduling",
+        "tools": ["terminal", "process", "read_terminal", "close_terminal", "execute_code", "read_file", "write_file", "patch", "search_files", "cronjob", "skills_list", "skill_view"],
+        "includes": []
+    },
+    "role_operator": {
+        "description": "Autonomous Desktop, Chintu Browser & OmniMesh Operator toolset — computer use, browser automation, vision grounding, and TTS",
+        "tools": ["computer_use", "vision_analyze", "text_to_speech", "skills_list", "skill_view"],
+        "includes": ["browser"]
+    },
+    "role_researcher": {
+        "description": "Principal Deep Research & Intelligence Analyst toolset — multi-hop web/browser extraction, code synthesis, and memory",
+        "tools": ["web_search", "web_extract", "execute_code", "read_file", "write_file", "search_files", "memory", "session_search", "skills_list", "skill_view"],
+        "includes": ["browser"]
+    },
+    "role_designer": {
+        "description": "Principal UI/UX & Paper Studio Designer toolset — UI file authoring, visual inspection, image generation, and browser preview",
+        "tools": ["read_file", "write_file", "patch", "search_files", "vision_analyze", "image_generate", "open_preview", "skills_list", "skill_view"],
+        "includes": ["browser"]
     }
 }
 

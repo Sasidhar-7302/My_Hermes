@@ -307,9 +307,21 @@ ROLE_META = {
     },
     "OPERATOR": {
         "icon": "🖥️",
-        "title": "Desktop & Computer Operator",
-        "desc": "Automates OS tasks, window management, and application workflows under strict deletion & payment shields.",
+        "title": "Desktop, Chintu Browser & OmniMesh Operator",
+        "desc": "Automates OS tasks, window management, Chintu Profile 1 browser, and companion workflows under strict deletion & payment shields.",
         "color": "#06b6d4"
+    },
+    "RESEARCHER": {
+        "icon": "🔬",
+        "title": "Principal Deep Research & Intelligence Analyst",
+        "desc": "Conducts multi-hop arXiv, web, Slickdeals, and Reddit market intelligence with headless Chintu extraction and primary-source grading.",
+        "color": "#10b981"
+    },
+    "DESIGNER": {
+        "icon": "🎨",
+        "title": "Principal UI/UX & Paper Studio Designer",
+        "desc": "Crafts modern dark glassmorphic interfaces across PC, Smartwatch AMOLED HUD, Smartphone PWA, and Paper Desktop MCP Studio.",
+        "color": "#e879f9"
     }
 }
 
@@ -375,6 +387,70 @@ async def api_update_soul(request: Request):
         success = save_soul(role, soul)
         return {"status": "ok" if success else "error"}
     return {"status": "bad_request"}
+
+
+@app.get("/api/roster/full")
+async def api_roster_full():
+    """Returns the complete 10-member Team Roster with skills, required tools, MCP servers, and 3-strike persistence policies."""
+    import importlib
+    try:
+        from local_model_lab import role_registry as rr
+    except ImportError:
+        import role_registry as rr
+    importlib.reload(rr)
+
+    roster_out = {}
+    for role_name, rdata in rr.ROLES.items():
+        tool_info = rr.get_role_tool_access(role_name)
+        logs = get_employee_logs(role_name)
+        roster_out[role_name] = {
+            **rdata,
+            "resolved_tools": tool_info.get("resolved_tools", []),
+            "tasks_completed": len(logs),
+        }
+    return JSONResponse(content={"status": "ok", "count": len(roster_out), "roster": roster_out})
+
+
+@app.get("/api/roster/skill/{role}")
+async def api_roster_skill(role: str):
+    """Loads and returns the full SKILL.md playbook and tool matrix for a Team Roster member."""
+    try:
+        from local_model_lab import role_registry as rr
+    except ImportError:
+        import role_registry as rr
+    role_key = role.upper()
+    if role_key not in rr.ROLES:
+        return JSONResponse(status_code=404, content={"status": "error", "message": f"Unknown role: {role}"})
+    skill_md = rr.load_role_skill_markdown(role_key)
+    tool_access = rr.get_role_tool_access(role_key)
+    return JSONResponse(content={
+        "status": "ok",
+        "role": role_key,
+        "skill_id": rr.ROLES[role_key].get("skill_id", ""),
+        "skill_path": rr.ROLES[role_key].get("skill_path", ""),
+        "skill_markdown": skill_md,
+        "tool_access": tool_access,
+    })
+
+
+@app.post("/api/roster/dispatch")
+async def api_roster_dispatch(request: Request):
+    """Dispatches a task to a Team Roster specialist (or AUTO via Laya) with SKILL.md + live domain tools + 3-strike Never-Give-Up loop."""
+    import asyncio
+    data = await request.json()
+    task = (data.get("task") or "").strip()
+    role = (data.get("role") or "AUTO").strip().upper()
+    if not task:
+        return JSONResponse(status_code=400, content={"status": "error", "message": "task is required"})
+
+    try:
+        from local_model_lab.agent_dispatcher import dispatch_task
+    except ImportError:
+        from agent_dispatcher import dispatch_task
+
+    forced = None if role in ("", "AUTO") else role
+    res = await asyncio.to_thread(dispatch_task, task, forced)
+    return JSONResponse(content=res)
 
 
 @app.get("/api/desktop/monitors")
@@ -2050,17 +2126,76 @@ def dashboard():
 
     <!-- TAB 1: TEAM ROSTER -->
     <div id="tab-roster" class="tab-panel active">
+        <!-- Interactive Multi-Agent Task Dispatch & Never-Give-Up Command Bar -->
+        <div class="panel-container" style="margin-bottom: 18px; border: 1px solid rgba(56, 189, 248, 0.35); background: linear-gradient(135deg, rgba(13, 19, 26, 0.96) 0%, rgba(15, 29, 42, 0.92) 100%);">
+            <div class="panel-header" style="margin-bottom: 12px;">
+                <div>
+                    <h2 class="panel-title">⚡ Elite Team Roster — Skill-Augmented Never-Give-Up Dispatcher</h2>
+                    <p class="panel-desc">Every specialist is equipped with a dedicated domain <code>SKILL.md</code> playbook, scoped Hermes &amp; MCP tool access, and a 3-Strike RETRACE persistence loop.</p>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 700; color: #10b981; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.35); padding: 4px 10px; border-radius: 999px;">10 Specialists Active</span>
+                    <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.35); padding: 4px 10px; border-radius: 999px;">🛡️ 3-Strike Never-Give-Up Loop</span>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
+                <select id="roster-dispatch-role" class="form-input" style="width: 240px; font-weight: 700; color: #38bdf8;">
+                    <option value="AUTO">⚡ Auto-Route (Laya System-1 &lt;35ms)</option>
+                    <option value="CEO">🧠 CEO — Executive Orchestrator</option>
+                    <option value="PM">📋 PM — Product &amp; Discovery Specs</option>
+                    <option value="ARCHITECT">🏗️ ARCHITECT — Systems &amp; Schemas</option>
+                    <option value="CODER">💻 CODER — Staff Polyglot Engineer</option>
+                    <option value="TESTER">🧪 TESTER — Principal QA &amp; Chaos</option>
+                    <option value="SECURITY">🔒 SECURITY — CISO &amp; Red-Team</option>
+                    <option value="DEVOPS">🚀 DEVOPS — Principal SRE &amp; Infra</option>
+                    <option value="OPERATOR">🖥️ OPERATOR — Desktop &amp; Chintu Browser</option>
+                    <option value="RESEARCHER">🔬 RESEARCHER — Deep Research &amp; Deals</option>
+                    <option value="DESIGNER">🎨 DESIGNER — UI/UX &amp; Paper Studio</option>
+                </select>
+                <input type="text" id="roster-dispatch-input" class="form-input" style="flex: 1; min-width: 260px;" placeholder="Assign any mission to the team (e.g. 'Deep research best RTX 5090 deals on Slickdeals', 'Audit OWASP & PII security')..." onkeydown="if(event.key==='Enter') dispatchRosterTask()" />
+                <button class="btn-action" id="roster-dispatch-btn" style="background: #10b981; color: #05130d; font-weight: 800; padding: 9px 18px;" onclick="dispatchRosterTask()">
+                    🚀 Dispatch Mission
+                </button>
+            </div>
+
+            <!-- Quick Preset Missions -->
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Quick Missions:</span>
+                <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('RESEARCHER', 'Deep research the best current GPU and OLED monitor deals across Slickdeals frontpage and Reddit buildapcsales with price comparison.')">🔬 Research Deals (RESEARCHER)</button>
+                <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('PM', 'Write a zero-ambiguity PRD with RICE prioritization and Given-When-Then acceptance criteria for our Smartwatch voice deal alert feature.')">📋 Write PRD &amp; RICE (PM)</button>
+                <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('ARCHITECT', 'Design a high-scale SQLite WAL + WebSocket event mesh schema with p99 latency budgets and Mermaid topology.')">🏗️ Mesh Blueprint (ARCHITECT)</button>
+                <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('SECURITY', 'Conduct a 4-layer zero-trust OWASP & PII Shield security audit of our companion and browser endpoints.')">🔒 Zero-Trust Audit (SECURITY)</button>
+                <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('DEVOPS', 'Verify 24/7 HermesWatchdog health, connected displays, and Smart Idle Shutdown readiness.')">🚀 SRE Health Check (DEVOPS)</button>
+            </div>
+
+            <!-- Live Execution Result Box -->
+            <div id="roster-dispatch-result" style="display: none; margin-top: 14px; background: #070b0f; border: 1px solid rgba(16,185,129,0.4); border-radius: 8px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
+                    <div id="roster-res-header" style="font-size: 13px; font-weight: 800; color: #10b981;">Dispatched</div>
+                    <div id="roster-res-meta" style="font-size: 11px; color: #38bdf8; font-family: monospace;"></div>
+                </div>
+                <pre id="roster-res-body" style="white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.55; color: var(--text-main); max-height: 360px; overflow-y: auto; margin: 0; font-family: inherit;"></pre>
+            </div>
+        </div>
+
         <div class="cards-grid">
 """
 
     for role_name, data in current_roles.items():
         soul = data.get("soul", "")
         models = data.get("models", [])
+        skill_id = data.get("skill_id", f"{role_name.lower()}-skill")
+        dept = data.get("department", "Core Specialist")
+        specialties = data.get("domain_specialties", [])
+        req_tools = data.get("required_tools", [])
+        mcp_servers = data.get("mcp_servers", ["hermes-desktop"])
+        ngu_policy = data.get("never_give_up_policy", {})
         meta = ROLE_META.get(role_name, {
-            "icon": "🤖",
-            "title": f"{role_name} Agent",
+            "icon": data.get("icon", "🤖"),
+            "title": data.get("title", f"{role_name} Agent"),
             "desc": "Autonomous specialist",
-            "color": "#38bdf8"
+            "color": data.get("color", "#38bdf8")
         })
 
         nodes_html = []
@@ -2075,21 +2210,81 @@ def dashboard():
 
         chain_html = ' <span class="chain-arrow">&rarr;</span> '.join(nodes_html)
 
+        spec_chips = "".join(
+            f'<span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:5px;background:rgba(56,189,248,0.12);color:#bae6fd;border:1px solid rgba(56,189,248,0.28);">{s}</span>'
+            for s in specialties
+        )
+        tool_chips = "".join(
+            f'<span style="font-size:10px;font-family:monospace;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,0.12);color:#6ee7b7;border:1px solid rgba(16,185,129,0.25);">{t}</span>'
+            for t in req_tools[:12]
+        )
+        if len(req_tools) > 12:
+            tool_chips += f'<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);color:#94a3b8;">+{len(req_tools)-12} more</span>'
+        mcp_chips = "".join(
+            f'<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(168,85,247,0.18);color:#e9d5ff;border:1px solid rgba(168,85,247,0.35);">MCP:{srv}</span>'
+            for srv in mcp_servers
+        )
+
         html += f"""
-            <div class="employee-card">
+            <div class="employee-card" style="border-top: 3px solid {meta.get('color', '#38bdf8')};">
                 <div class="card-top">
                     <div class="role-identity">
                         <div class="role-avatar">{meta['icon']}</div>
                         <div class="role-details">
-                            <div class="role-badge-row">
+                            <div class="role-badge-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                                 <span class="role-name">{role_name}</span>
+                                <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.06);color:#94a3b8;">{dept}</span>
                             </div>
                             <span class="role-subhead">{meta['title']}</span>
                         </div>
                     </div>
-                    <div class="status-pill">
-                        <div class="pulse-dot"></div>
-                        <span>ONLINE</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+                        <div class="status-pill">
+                            <div class="pulse-dot"></div>
+                            <span>ONLINE</span>
+                        </div>
+                        <button class="btn-action" style="padding:3px 8px;font-size:10px;background:rgba(56,189,248,0.16);border-color:#38bdf8;color:#38bdf8;" onclick="viewRoleSkill('{role_name}')">
+                            📘 View SKILL.md
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Domain Specialties & Active Skill Playbook -->
+                <div class="roster-section" style="padding: 10px; background: rgba(0,0,0,0.22); border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div class="roster-title-row" style="margin-bottom: 6px;">
+                        <span>🎯 Domain Skill: <code style="color:#38bdf8;">{skill_id}</code></span>
+                        <span style="color:#10b981;font-weight:700;">Verified Playbook</span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:5px;">
+                        {spec_chips}
+                    </div>
+                </div>
+
+                <!-- Granted Tools & MCP Access Matrix -->
+                <div class="roster-section" style="padding: 10px; background: rgba(0,0,0,0.22); border-radius: 6px; border: 1px solid var(--border-subtle);">
+                    <div class="roster-title-row" style="margin-bottom: 6px;">
+                        <span>🔧 Granted Tools &amp; MCP Access ({len(req_tools)} Tools)</span>
+                        <span>Toolset: <code>{data.get('toolset', 'scoped')}</code></span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px;">
+                        {mcp_chips}
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                        {tool_chips}
+                    </div>
+                </div>
+
+                <!-- Never-Give-Up 3-Strike Persistence Protocol -->
+                <div class="roster-section" style="padding: 10px; background: rgba(16,185,129,0.05); border-radius: 6px; border: 1px solid rgba(16,185,129,0.25);">
+                    <div class="roster-title-row" style="margin-bottom: 4px;">
+                        <span style="color:#10b981;font-weight:700;">🛡️ Never-Give-Up 3-Strike Loop (RETRACE)</span>
+                        <span style="font-size:10px;color:#6ee7b7;">Max Strikes: {ngu_policy.get('max_strikes', 3)}</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted);line-height:1.45;">
+                        <div><strong style="color:#e2e8f0;">1:</strong> {ngu_policy.get('strike_1', 'Primary execution')}</div>
+                        <div><strong style="color:#e2e8f0;">2:</strong> {ngu_policy.get('strike_2', 'RETRACE strategy pivot')}</div>
+                        <div><strong style="color:#e2e8f0;">3:</strong> {ngu_policy.get('strike_3', 'Sovereign local synthesis')}</div>
+                        <div style="margin-top:3px;color:#38bdf8;font-size:10px;"><strong>Gate:</strong> {ngu_policy.get('verification_gate', 'Deterministic verification')}</div>
                     </div>
                 </div>
 
@@ -2105,7 +2300,7 @@ def dashboard():
 
                 <div class="soul-container">
                     <div class="soul-header">
-                        <span>Soul Directives & Memory</span>
+                        <span>Soul Directives &amp; Memory</span>
                         <span>Auto-Synchronized</span>
                     </div>
                     <textarea id="soul-{role_name}" class="soul-box">{soul}</textarea>
@@ -2113,6 +2308,12 @@ def dashboard():
                         <span id="saved-{role_name}" class="save-indicator">&check; Updated!</span>
                         <button class="btn-save" onclick="updateSoul('{role_name}')">Save Directives</button>
                     </div>
+                </div>
+
+                <!-- Direct Quick-Assign Bar for this Specialist -->
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                    <input type="text" id="quick-task-{role_name}" class="form-input" style="flex:1;font-size:11px;padding:6px 9px;" placeholder="Assign task directly to {role_name}..." onkeydown="if(event.key==='Enter') quickAssignRole('{role_name}')" />
+                    <button class="btn-action" style="padding:6px 10px;font-size:11px;background:rgba(16,185,129,0.18);border-color:#10b981;color:#10b981;font-weight:700;" onclick="quickAssignRole('{role_name}')">⚡ Run</button>
                 </div>
 
                 <div class="emp-logs-accordion">
@@ -2131,11 +2332,14 @@ def dashboard():
                 mdl = item.get("model", "")
                 tsk = item.get("task", "")
                 rsp = item.get("response", "")
+                tools_u = ", ".join(item.get("tools_used", []))
+                strikes_u = item.get("strikes_used", 1)
+                extra_badge = f" &bull; Strike {strikes_u}" + (f" &bull; Tools: {tools_u}" if tools_u else "")
                 html += f"""
                         <div class="emp-log-item">
                             <div class="emp-log-top">
                                 <span>{ts}</span>
-                                <span style="color: var(--accent-green);">{lat}ms &bull; {mdl}</span>
+                                <span style="color: var(--accent-green);">{lat}ms &bull; {mdl}{extra_badge}</span>
                             </div>
                             <div class="emp-log-task"><strong>Task:</strong> {tsk}</div>
                             <div class="emp-log-resp">{rsp}</div>
@@ -2155,6 +2359,20 @@ def dashboard():
         """
 
     html += """
+        </div>
+
+        <!-- SKILL.md Playbook Modal Viewer -->
+        <div id="skill-viewer-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;align-items:center;justify-content:center;padding:20px;" onclick="closeSkillModal()">
+            <div style="background:#0b1118;border:1px solid #38bdf8;border-radius:12px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,0.8);" onclick="event.stopPropagation()">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-subtle);">
+                    <div>
+                        <div id="skill-modal-title" style="font-size:15px;font-weight:800;color:#ffffff;">📘 Specialist Domain Skill Playbook</div>
+                        <div id="skill-modal-sub" style="font-size:11px;color:#38bdf8;font-family:monospace;margin-top:2px;"></div>
+                    </div>
+                    <button class="btn-action" onclick="closeSkillModal()" style="padding:4px 10px;font-size:14px;">&times; Close</button>
+                </div>
+                <pre id="skill-modal-body" style="padding:18px;margin:0;overflow-y:auto;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.6;color:#e2e8f0;font-family:monospace;flex:1;"></pre>
+            </div>
         </div>
     </div>
 
@@ -3332,6 +3550,110 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             } catch (err) {
                 alert('Connection error: ' + err);
             }
+        }
+
+        function fillRosterPreset(role, text) {
+            const sel = document.getElementById('roster-dispatch-role');
+            const inp = document.getElementById('roster-dispatch-input');
+            if (sel) sel.value = role;
+            if (inp) inp.value = text;
+            dispatchRosterTask();
+        }
+
+        function quickAssignRole(role) {
+            const inp = document.getElementById('quick-task-' + role);
+            if (!inp || !inp.value.trim()) return;
+            const sel = document.getElementById('roster-dispatch-role');
+            const mainInp = document.getElementById('roster-dispatch-input');
+            if (sel) sel.value = role;
+            if (mainInp) mainInp.value = inp.value.trim();
+            inp.value = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            dispatchRosterTask();
+        }
+
+        async function dispatchRosterTask() {
+            const sel = document.getElementById('roster-dispatch-role');
+            const inp = document.getElementById('roster-dispatch-input');
+            const btn = document.getElementById('roster-dispatch-btn');
+            const resBox = document.getElementById('roster-dispatch-result');
+            const resHeader = document.getElementById('roster-res-header');
+            const resMeta = document.getElementById('roster-res-meta');
+            const resBody = document.getElementById('roster-res-body');
+
+            const role = sel ? sel.value : 'AUTO';
+            const task = inp ? inp.value.trim() : '';
+            if (!task) {
+                showToast('Please enter a mission for the Team Roster');
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = '⏳ Executing (3-Strike Loop)...';
+            }
+            if (resBox) resBox.style.display = 'block';
+            if (resHeader) resHeader.innerText = `⚡ Dispatching to ${role === 'AUTO' ? 'Laya System-1 Auto-Router' : role}...`;
+            if (resMeta) resMeta.innerText = 'Loading SKILL.md + Running Scoped Domain Tools...';
+            if (resBody) resBody.innerText = 'Executing pre-flight domain tools and specialist model cascade...';
+
+            try {
+                const res = await fetch('/api/roster/dispatch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: role, task: task })
+                });
+                const data = await res.json();
+                const toolsStr = (data.tools_used && data.tools_used.length) ? data.tools_used.join(', ') : 'domain-context';
+                if (resHeader) {
+                    resHeader.innerText = `✅ Completed by ${data.role || role} (Skill: ${data.skill_id || 'active'})`;
+                }
+                if (resMeta) {
+                    resMeta.innerText = `Model: ${data.model || 'verified'} • Latency: ${data.latency_ms || 0}ms • Strike: ${data.strikes_used || 1}/3 • Tools: [${toolsStr}]`;
+                }
+                if (resBody) {
+                    resBody.innerText = data.response || JSON.stringify(data, null, 2);
+                }
+                showToast(`${data.role || role} completed mission!`);
+            } catch (e) {
+                if (resHeader) resHeader.innerText = '❌ Dispatch Error';
+                if (resBody) resBody.innerText = String(e);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = '🚀 Dispatch Mission';
+                }
+            }
+        }
+
+        async function viewRoleSkill(role) {
+            const modal = document.getElementById('skill-viewer-modal');
+            const titleEl = document.getElementById('skill-modal-title');
+            const subEl = document.getElementById('skill-modal-sub');
+            const bodyEl = document.getElementById('skill-modal-body');
+            if (!modal) return;
+            modal.style.display = 'flex';
+            if (titleEl) titleEl.innerText = `📘 ${role} — Domain Skill Playbook`;
+            if (subEl) subEl.innerText = 'Loading SKILL.md...';
+            if (bodyEl) bodyEl.innerText = 'Fetching skill markdown...';
+            try {
+                const res = await fetch('/api/roster/skill/' + encodeURIComponent(role));
+                const data = await res.json();
+                if (titleEl) titleEl.innerText = `📘 ${data.role} — ${data.skill_id}`;
+                if (subEl) {
+                    const toolsCount = (data.tool_access?.resolved_tools || []).length;
+                    const mcps = (data.tool_access?.mcp_servers || []).join(', ');
+                    subEl.innerText = `Path: ${data.skill_path} • Granted Tools: ${toolsCount} • MCPs: [${mcps}]`;
+                }
+                if (bodyEl) bodyEl.innerText = data.skill_markdown || 'No SKILL.md content found.';
+            } catch (e) {
+                if (bodyEl) bodyEl.innerText = 'Error loading skill: ' + e;
+            }
+        }
+
+        function closeSkillModal() {
+            const modal = document.getElementById('skill-viewer-modal');
+            if (modal) modal.style.display = 'none';
         }
 
         // --- Desktop Shell & Windows Logic ---
