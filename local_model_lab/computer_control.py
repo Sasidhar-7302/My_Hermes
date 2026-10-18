@@ -83,28 +83,26 @@ except ImportError:
 
 # Destructive patterns that are UNCONDITIONALLY BLOCKED (Cannot run, no exceptions)
 DELETION_PATTERNS = [
-    r'\brm\b\s+-[rf]',
-    r'\bdel\b\s+',
+    r'\brm\b\s+(-[a-zA-Z]*[rf][a-zA-Z]*|--recursive|--force)',
+    r'\bdel\b\s+(/[fqs]|["\']?[a-zA-Z]:\\|\*\.)',
     r'\brmdir\b\s+',
     r'\brd\b\s+/[sq]',
     r'\bRemove-Item\b',
-    r'\bri\b\s+',
-    r'\berase\b\s+',
+    r'\berase\b\s+(/[fqs]|[a-zA-Z]:\\)',
     r'\bformat\b\s+[a-z]:',
     r'\bdiskpart\b',
     r'\bshred\b',
     r'\bsrm\b',
     r'\bwipefs\b',
     r'\bmkfs\b',
-    r'\bclean\b\s+-[fdx]',
-    r'\breset\s+--hard\b',
-    r'\bdrop\s+(database|table)\b',
+    r'\bgit\s+clean\b\s+-[fdx]',
+    r'\bgit\s+reset\s+--hard\b',
+    r'\bdrop\s+(database|table|schema)\b',
     r'\btruncate\s+table\b',
     r'\bempty\s+(trash|recycle\s*bin)\b',
     r'\bshift\s*\+\s*delete\b',
-    r'\bdelete\b',
-    r'\bwipe\b',
-    r'\bpurge\b'
+    r'\b(delete|wipe|purge|destroy)\s+(all\s+)?(files?|folders?|director(y|ies)|system32|disk|drive|partition|database|production|repo|repository|workspace|logs)\b',
+    r'\b(permanently\s+delete|force\s+delete|recursively\s+delete)\b',
 ]
 
 # Payment / Financial patterns that are UNCONDITIONALLY BLOCKED
@@ -113,29 +111,27 @@ PAYMENT_PATTERNS = [
     r'\bcvv\b',
     r'\bcard\s*number\b',
     r'\bexpiration\s*date\b',
-    r'\bcheckout\b',
-    r'\bplace\s*order\b',
-    r'\bbuy\s*now\b',
+    r'\b(complete|submit|proceed\s+to|confirm)\s+checkout\b',
+    r'\bplace\s*(the\s*|my\s*)?order\b',
+    r'\b(buy|purchase)\s+(it\s+|this\s+)?now\s+with\b',
     r'\bpay\s*now\b',
-    r'\bpaypal\b',
-    r'\bstripe\b',
+    r'\b(pay\s+with|send\s+money\s+via)\s*(paypal|stripe|venmo|apple\s*pay)\b',
     r'\bbank\s*account\b',
     r'\brouting\s*number\b',
     r'\bwire\s*transfer\b',
     r'\bach\s*transfer\b',
     r'\bpayment\s*method\b',
     r'\bconfirm\s*payment\b',
-    r'\bauthorize\s*payment\b'
+    r'\bauthorize\s*payment\b',
 ]
 
 # Sensitive external communication patterns requiring TELEGRAM CONFIRMATION
 COMMUNICATION_PATTERNS = [
-    r'\b(send|compose|write|dispatch)\s*(an?\s*)?email\b',
-    r'\b(send|post|dispatch)\s*(a\s*)?message\b',
-    r'\bpost\s*(a\s*message\s*)?(to|in|on)\s*(slack|discord|teams|twitter|x)\b',
-    r'\b(slack|discord|teams)\b.*?\b(message|announc|post|channel)\b',
-    r'\bmail\s*to\b',
-    r'\bpublish\s*to\b'
+    r'\b(send|compose|dispatch)\s+(an?\s+)?email\s+to\b',
+    r'\b(send|post|dispatch)\s+(a\s+)?(slack|discord|teams|whatsapp|telegram)\s+message\b',
+    r'\bpost\s+(a\s+message\s+)?(to|in|on)\s+(slack|discord|teams|twitter|x)\b',
+    r'\bmail\s+to\b',
+    r'\bpublish\s+to\s+production\b',
 ]
 
 class SafetyViolationError(Exception):

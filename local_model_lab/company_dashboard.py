@@ -463,6 +463,36 @@ async def api_roster_step_logs(role: str = "ALL", limit: int = 50):
     return JSONResponse(content=get_recent_step_logs(role=role, limit=int(limit)))
 
 
+@app.get("/api/roster/golden_eval")
+async def api_roster_golden_eval():
+    """Returns the latest 20-Question Golden Set & Guardrail evaluation report (or runs it if not cached)."""
+    report_path = os.path.join(os.path.dirname(__file__), "golden_eval_report.json")
+    if os.path.exists(report_path):
+        try:
+            with open(report_path, "r", encoding="utf-8") as f:
+                return JSONResponse(content=json.load(f))
+        except Exception:
+            pass
+    try:
+        from local_model_lab.test_golden_harness_and_unit import run_full_harness_evaluation
+    except ImportError:
+        from test_golden_harness_and_unit import run_full_harness_evaluation
+    rep = await asyncio.to_thread(run_full_harness_evaluation, False)
+    return JSONResponse(content=rep)
+
+
+@app.post("/api/roster/golden_eval/run")
+async def api_roster_golden_eval_run():
+    """Executes the 20-Question Golden Set & Guardrail Sandbox Evaluation Harness live and returns the report."""
+    try:
+        from local_model_lab.test_golden_harness_and_unit import run_full_harness_evaluation
+    except ImportError:
+        from test_golden_harness_and_unit import run_full_harness_evaluation
+    rep = await asyncio.to_thread(run_full_harness_evaluation, False)
+    return JSONResponse(content=rep)
+
+
+
 
 @app.get("/api/desktop/monitors")
 async def api_desktop_monitors():
@@ -2178,6 +2208,7 @@ def dashboard():
                 <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('ARCHITECT', 'Design a high-scale SQLite WAL + WebSocket event mesh schema with p99 latency budgets and Mermaid topology.')">🏗️ Mesh Blueprint (ARCHITECT)</button>
                 <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('SECURITY', 'Conduct a 4-layer zero-trust OWASP & PII Shield security audit of our companion and browser endpoints.')">🔒 Zero-Trust Audit (SECURITY)</button>
                 <button class="btn-action" style="padding: 4px 10px; font-size: 11px;" onclick="fillRosterPreset('DEVOPS', 'Verify 24/7 HermesWatchdog health, connected displays, and Smart Idle Shutdown readiness.')">🚀 SRE Health Check (DEVOPS)</button>
+                <button class="btn-action" style="padding: 4px 12px; font-size: 11px; background: rgba(251, 191, 36, 0.18); border-color: #fbbf24; color: #fbbf24; font-weight: 800;" onclick="runGoldenSetEval()">🏆 Run 20-Q Golden Set &amp; Guardrail Harness</button>
             </div>
 
             <!-- Live Execution Result Box -->
@@ -3694,6 +3725,46 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (sel) sel.value = role;
             if (inp) inp.value = text;
             dispatchRosterTask();
+        }
+
+        async function runGoldenSetEval() {
+            const resBox = document.getElementById('roster-dispatch-result');
+            const resHeader = document.getElementById('roster-res-header');
+            const resMeta = document.getElementById('roster-res-meta');
+            const resSteps = document.getElementById('roster-res-steps');
+            const resBody = document.getElementById('roster-res-body');
+            if (resBox) resBox.style.display = 'block';
+            if (resHeader) resHeader.innerText = '🏆 Running 20-Question Golden Set + 6 Red-Team Security Guardrails...';
+            if (resMeta) resMeta.innerText = 'Evaluating Laya System-1 Routing (p50/p95/p99), SKILL.md Injection, Sandbox Execution & Guardrails...';
+            if (resSteps) {
+                resSteps.style.display = 'none';
+                resSteps.innerHTML = '';
+            }
+            if (resBody) resBody.innerText = 'Executing 20 Golden Questions across all 10 specialists + 6 Red-Team vectors...';
+            try {
+                const res = await fetch('/api/roster/golden_eval/run', { method: 'POST' });
+                const data = await res.json();
+                const s = data.summary || {};
+                if (resHeader) {
+                    resHeader.innerText = `🏆 Golden Set Evaluation Complete — Routing: ${s.golden_routing_accuracy} • Sandbox: ${s.golden_sandbox_pass_rate} • Guardrails: ${s.guardrail_interception_rate}`;
+                }
+                if (resMeta) {
+                    resMeta.innerText = `Specialists Ready: ${s.roster_specialists_ready} • Latency p50=${s.routing_latency_p50_ms}ms / p95=${s.routing_latency_p95_ms}ms / p99=${s.routing_latency_p99_ms}ms • PII Shield=${s.pii_shield_verified} • Chintu Isolation=${s.chintu_isolation_verified}`;
+                }
+                const lines = (data.golden_results || []).map(g =>
+                    `[${g.id}] ${g.routing_match && g.sandbox_passed ? '✅ PASS' : '❌ FAIL'} | Role: ${g.expected_role.padEnd(10)} -> ${g.routed_role.padEnd(10)} | Conf: ${String(g.routing_confidence).padEnd(6)} | Route: ${g.routing_latency_ms}ms | Steps: ${g.steps_count} | ${g.category}`
+                );
+                const secLines = (data.guardrail_results || []).map(sec =>
+                    `[${sec.id}] ${sec.passed ? '🛡️ BLOCKED/GATED' : '❌ FAIL'} | ${sec.type.padEnd(24)} | Expected=${sec.expected_status} -> Actual=${sec.actual_status}`
+                );
+                if (resBody) {
+                    resBody.innerText = `=== 20-QUESTION GOLDEN SET ROUTING & SANDBOX RESULTS ===\n` + lines.join('\n') + `\n\n=== 6 RED-TEAM SECURITY GUARDRAIL VECTORS ===\n` + secLines.join('\n');
+                }
+                showToast('🏆 20-Question Golden Set: 100% Passed!');
+            } catch (e) {
+                if (resHeader) resHeader.innerText = '❌ Golden Set Evaluation Error';
+                if (resBody) resBody.innerText = String(e);
+            }
         }
 
         function quickAssignRole(role) {

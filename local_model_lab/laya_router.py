@@ -125,7 +125,9 @@ DOMAIN_RULES = {
             ("opentelemetry collector", 4), ("jaeger", 4), ("automated database backups", 4),
             ("database backups", 4), ("bash script", 5), ("shell script", 4),
             ("ci/cd pipeline", 4), ("ci/cd", 4), ("production outage", 4), ("disk space 100%", 4),
-            ("root volume", 3), ("server maintenance", 3), ("encrypted dumps", 4)
+            ("root volume", 3), ("server maintenance", 3), ("encrypted dumps", 4),
+            ("hermeswatchdog", 5), ("smart idle shutdown", 5), ("smart shutdown", 5),
+            ("24/7 daemon", 4), ("wake-on-lan", 4), ("network idle", 4)
         ],
         "keywords": [
             ("docker", 3), ("kubernetes", 4), ("k8s", 4), ("helm", 4), ("terraform", 4),
@@ -133,7 +135,7 @@ DOMAIN_RULES = {
             ("deploy", 2), ("deployment", 2), ("ci/cd", 3), ("pipeline", 2), ("devops", 4),
             ("daemonset", 3), ("fargate", 3), ("ecs", 3), ("cloud", 1), ("infra", 2),
             ("infrastructure", 2), ("outage", 2), ("bash", 3), ("shell", 2), ("backup", 3),
-            ("backups", 3), ("s3", 3)
+            ("backups", 3), ("s3", 3), ("sre", 4), ("watchdog", 4)
         ]
     },
     "OPERATOR": {
@@ -141,41 +143,46 @@ DOMAIN_RULES = {
             ("open app", 5), ("open application", 5), ("launch app", 5), ("launch application", 5),
             ("open notepad", 5), ("open chrome", 5), ("open browser", 5), ("open terminal", 5),
             ("open settings", 5), ("windows settings", 5), ("settings app", 4),
-            ("open paper", 5), ("paper app", 5), ("paper design", 5), ("design in paper", 5),
-            ("browse to", 5), ("open url", 5), ("search web", 5), ("mouse click", 5), ("drag mouse", 5), ("scroll", 4),
+            ("chintu browser", 6), ("open in chintu", 6), ("snap window", 6), ("move window", 6),
+            ("browse to", 5), ("open url", 5), ("mouse click", 5), ("drag mouse", 5), ("scroll", 4),
             ("focus window", 5), ("switch window", 5), ("bring to front", 5), ("active window", 4),
             ("type text into", 5), ("type text", 4), ("type into", 4), ("send keys", 4),
             ("send hotkey", 5), ("press hotkey", 5), ("press alt+f4", 5), ("press ctrl+s", 5),
             ("desktop control", 5), ("computer control", 5), ("desktop automation", 5),
             ("list windows", 5), ("visible windows", 4), ("screen capture", 4), ("take screenshot", 4),
-            ("switch to", 4)
+            ("record macro", 5), ("replay macro", 5), ("rpa macro", 5), ("switch to", 4)
         ],
         "keywords": [
             ("desktop", 3), ("window", 3), ("windows", 3), ("launch", 3), ("hotkey", 4),
             ("keyboard", 3), ("mouse", 3), ("gui", 3), ("screen", 2), ("screenshot", 3),
-            ("focus", 3), ("paper", 4)
+            ("focus", 3), ("chintu", 4), ("rpa", 4)
         ]
     },
     "RESEARCHER": {
         "phrases": [
             ("deep research", 6), ("literature review", 6), ("arxiv paper", 6), ("arxiv papers", 6),
             ("scientific literature", 6), ("slickdeals frontpage", 6), ("compare prices across", 6),
-            ("fact check", 5), ("cite sources", 5), ("research report", 5), ("academic papers", 5),
-            ("search slickdeals", 6), ("reddit buildapcsales", 6)
+            ("price comparison", 5), ("fact check", 5), ("cite sources", 5), ("research report", 5),
+            ("academic papers", 5), ("search slickdeals", 6), ("reddit buildapcsales", 6),
+            ("market intelligence", 5), ("best deals", 5), ("gpu deals", 5), ("oled monitor deals", 5),
+            ("biorxiv", 5), ("europepmc", 5), ("openalex", 5), ("pubmed", 5)
         ],
         "keywords": [
             ("arxiv", 5), ("pubmed", 5), ("openalex", 5), ("slickdeals", 5), ("literature", 4),
-            ("citations", 4), ("bibliography", 4)
+            ("citations", 4), ("bibliography", 4), ("research", 3), ("deals", 3), ("retailers", 3)
         ]
     },
     "DESIGNER": {
         "phrases": [
-            ("glassmorphic ui", 6), ("amoled hud", 6), ("color palette", 5), ("typography scale", 5),
-            ("wcag contrast", 6), ("css design tokens", 6), ("figma mockup", 5), ("wireframe layout", 5),
-            ("watch face ui", 6), ("companion ui design", 6), ("dark mode theme", 5)
+            ("glassmorphic ui", 6), ("glassmorphism", 6), ("amoled hud", 6), ("color palette", 5),
+            ("typography scale", 5), ("wcag contrast", 6), ("css design tokens", 6), ("design tokens", 5),
+            ("figma mockup", 5), ("wireframe layout", 5), ("watch face ui", 6), ("companion ui design", 6),
+            ("dark mode theme", 5), ("paper desktop", 6), ("paper mcp", 6), ("paper studio", 6),
+            ("create artboard", 6), ("paper artboard", 6), ("ui/ux design", 6), ("responsive layout", 5)
         ],
         "keywords": [
-            ("glassmorphism", 5), ("wireframe", 4), ("typography", 4), ("mockup", 4), ("artboard", 4)
+            ("glassmorphism", 5), ("wireframe", 4), ("typography", 4), ("mockup", 4), ("artboard", 5),
+            ("palette", 4), ("wcag", 5), ("amoled", 4), ("ui/ux", 5), ("css", 3)
         ]
     }
 }
@@ -195,11 +202,11 @@ URGENCY_LOW = [
 # Deterministic tool & companion signatures for Jev-style System-1 routing
 TOOL_SIGNATURES = {
     "smart_shutdown": ["shutdown", "shut down", "sleep pc", "power off", "when download finishes", "network idle"],
-    "deal_finder": ["best price", "cheapest", "find deal", "price drop", "compare price", "buy ", "shopping", "watchlist"],
+    "deal_finder": ["best price", "cheapest", "find deal", "price drop", "compare price", "buy ", "shopping", "watchlist", "slickdeals"],
     "rpa_recorder": ["record macro", "replay macro", "rpa", "automate clicks", "macro studio"],
-    "paper_design": ["paper app", "paper design", "design in paper", "open paper", "artboard", "mockup"],
+    "paper_design": ["paper desktop", "paper mcp", "paper studio", "paper design", "design in paper", "artboard", "mockup", "glassmorphic"],
     "screen_vision": ["what is on my screen", "describe screen", "screen capture", "take screenshot", "locate element"],
-    "window_manager": ["snap window", "move window", "focus window", "switch window", "list windows", "bring to front", "open app", "launch app", "open notepad", "open chrome", "open calculator"],
+    "window_manager": ["snap window", "move window", "focus window", "switch window", "list windows", "bring to front", "open app", "launch app", "open notepad", "open chrome", "open calculator", "chintu browser"],
     "security_guard": ["rm -rf", "format c:", "drop table", "delete system32", "confirm payment", "wire transfer"],
 }
 
@@ -221,7 +228,7 @@ def _classify_execution_tier(text: str, best_domain: str, target_tool: str, conf
     """
     Jev 4-tier 'Routed Support Desk' classification:
     - PLAIN_CODE: Deterministic OS/window/shutdown/macro actions (0 LLM tokens)
-    -HUMAN_APPROVAL: Destructive, financial, or security-critical actions requiring Telegram approval
+    - HUMAN_APPROVAL: Destructive, financial, or security-critical actions requiring Telegram approval
     - LOCAL_LLM: Routine coding/CEO/operator tasks or high-privacy local inference
     - CLOUD_LLM: Heavy multi-step architecture, deep code generation, or security audits
     """
@@ -270,16 +277,20 @@ def route_request(task_text: str) -> dict:
             scores["DEVOPS"] += 3
 
     # If it's "write a test" or "test suite", TESTER dominates over CODER
-    if re.search(r'\b(test suite|pytest|unit test|integration test|e2e test)\b', text):
+    if re.search(r'\b(test suite|pytest|unit test|integration test|e2e test|hypothesis|fuzz testing)\b', text):
         scores["TESTER"] += 4
 
     # If it's "investor pitch", "budget", "pivot", "OKR", CEO dominates over ARCHITECT or PM
-    if re.search(r'\b(investor|pitch deck|budget|pivot|okr|equity|governance|departmental)\b', text):
+    if re.search(r'\b(investor|pitch deck|budget|pivot|okr|okrs|equity|governance|departmental)\b', text):
         scores["CEO"] += 4
 
-    # If it's "vulnerability", "owasp", "sql injection", "cve", SECURITY dominates over CODER
-    if re.search(r'\b(vulnerability|vulnerabilities|owasp|cve|injection|xss|ssrf|idor|key revocation|insecure|audit)\b', text):
-        scores["SECURITY"] += 4
+    # If it's PRD, RICE scoring, acceptance criteria, or user stories, PM dominates
+    if re.search(r'\b(prd|rice scoring|acceptance criteria|given-when-then|user stories|user persona)\b', text):
+        scores["PM"] += 5
+
+    # If it's "vulnerability", "owasp", "sql injection", "cve", "pii shield", SECURITY dominates
+    if re.search(r'\b(vulnerability|vulnerabilities|owasp|cve|injection|xss|ssrf|idor|key revocation|insecure|security audit|pii shield|zero-trust)\b', text):
+        scores["SECURITY"] += 5
 
     # If auditing an infrastructure file (Dockerfile, container, permissions) for insecurity/audit, SECURITY dominates over DEVOPS
     if any(w in text for w in ["audit", "insecure", "vulnerability", "permission", "permissions"]):
@@ -290,8 +301,16 @@ def route_request(task_text: str) -> dict:
     if any(w in text for w in ["benchmark", "throughput", "stress test", "load test"]):
         scores["TESTER"] += 4
 
-    # If it's desktop automation, window switching, application launch, or keyboard/mouse actions, OPERATOR dominates
-    if re.search(r'\b((open|launch|focus|switch to|start)\s+(the\s+)?(app|application|window|notepad|chrome|browser|calculator|settings|terminal|paper|brave|vscode|word|chatgpt)|\b(browse to|search web|google search|mouse click|drag mouse|scroll|paper design|design in paper)\b|desktop control|computer control|desktop automation)\b', text) or text.startswith(('open ', 'launch ', 'switch to ', 'focus ')):
+    # If it's scientific literature, arXiv, PubMed, or Slickdeals/Reddit market research, RESEARCHER dominates
+    if re.search(r'\b(arxiv|pubmed|openalex|biorxiv|slickdeals|buildapcsales|literature review|deep research)\b', text):
+        scores["RESEARCHER"] += 6
+
+    # If it's UI/UX design, Paper Desktop artboards, glassmorphism, AMOLED HUD, or WCAG contrast, DESIGNER dominates
+    if re.search(r'\b(paper desktop|paper mcp|paper studio|create artboard|paper artboard|glassmorphic|glassmorphism|amoled hud|wcag contrast|design tokens|color palette|wireframe layout)\b', text):
+        scores["DESIGNER"] += 7
+
+    # If it's desktop automation, window switching, Chintu browser launch, or keyboard/mouse actions, OPERATOR dominates
+    if re.search(r'\b((open|launch|focus|switch to|start|snap|move)\s+(the\s+)?(app|application|window|notepad|chrome|browser|chintu|calculator|settings|terminal|brave|vscode|word|chatgpt)|\b(browse to|open in chintu|chintu browser|mouse click|drag mouse|record macro|replay macro)\b|desktop control|computer control|desktop automation)\b', text) or text.startswith(('open ', 'launch ', 'switch to ', 'focus ', 'snap ')):
         scores["OPERATOR"] += 7
 
     # Determine highest score
