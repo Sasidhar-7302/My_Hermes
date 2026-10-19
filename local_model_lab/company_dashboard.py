@@ -728,6 +728,19 @@ async def api_shutdown_start(request: Request):
         require_user_idle_seconds=int(data.get("require_user_idle_seconds", 120)),
     )
     ok, msg = mon.start(cfg)
+    if ok:
+        try:
+            from notification_center import get_notification_center
+            get_notification_center().notify(
+                title=f"🌙 Smart {cfg.action.upper()} Guard Armed",
+                body=f"Monitoring downloads (<{cfg.idle_kbps} KB/s for {cfg.idle_minutes}m) with {cfg.countdown_seconds}s safety countdown.",
+                priority="HIGH",
+                category="SMART_SHUTDOWN",
+                role="DEVOPS",
+                actions=[{"id": "cancel_shutdown", "label": "🛑 Cancel Smart Shutdown", "style": "danger"}],
+            )
+        except Exception:
+            pass
     return JSONResponse(content={"status": "ok" if ok else "error", "message": msg, "snapshot": mon.snapshot()})
 
 
@@ -828,7 +841,100 @@ async def api_deals_watch_check(request: Request):
     res = store.check_watch(watch_id) if store else None
     if not res:
         return JSONResponse(content={"status": "not_found"}, status_code=404)
+    try:
+        matches = res.get("matches") or []
+        if matches:
+            top = matches[0]
+            from notification_center import get_notification_center
+            get_notification_center().notify(
+                title=f"🛍️ Price Alert Matched: {top.get('title', 'Hot Deal')[:55]}",
+                body=f"${top.get('price', 'N/A')} on {top.get('vendor', 'Store')} ({len(matches)} matches found)",
+                priority="HIGH",
+                category="DEAL_ALERT",
+                role="RESEARCHER",
+                actions=[
+                    {
+                        "id": "open_chintu",
+                        "label": "🌐 Open in Chintu Browser",
+                        "url": top.get("url", ""),
+                        "style": "primary",
+                    }
+                ] if top.get("url") else [],
+            )
+    except Exception:
+        pass
     return JSONResponse(content={"status": "ok", **res})
+
+
+# ── UNIFIED MULTI-DEVICE NOTIFICATION CENTER API ───────────────────────────
+
+@app.get("/api/notifications")
+async def api_get_notifications(
+    unread_only: bool = False,
+    category: Optional[str] = None,
+    limit: int = 80,
+):
+    from notification_center import get_notification_center
+    nc = get_notification_center()
+    return JSONResponse(content=nc.list_notifications(
+        unread_only=unread_only,
+        category=category,
+        limit=limit,
+    ))
+
+
+@app.post("/api/notifications/send")
+async def api_send_notification(request: Request):
+    from notification_center import get_notification_center
+    data = await request.json()
+    nc = get_notification_center()
+    res = nc.notify(
+        title=str(data.get("title", "Hermes Sovereign Alert")),
+        body=str(data.get("body", "Multi-surface notification dispatched across PC, Watch, Phone & Laptop.")),
+        priority=str(data.get("priority", "HIGH")),
+        category=str(data.get("category", "INFO")),
+        role=str(data.get("role", "SYSTEM")),
+        actions=data.get("actions") or [],
+        metadata=data.get("metadata") or {},
+    )
+    return JSONResponse(content=res)
+
+
+@app.post("/api/notifications/read")
+async def api_mark_notification_read(request: Request):
+    from notification_center import get_notification_center
+    data = await request.json()
+    notif_id = str(data.get("notif_id", "ALL"))
+    nc = get_notification_center()
+    return JSONResponse(content=nc.mark_read(notif_id))
+
+
+@app.post("/api/notifications/clear")
+async def api_clear_notifications(request: Request):
+    from notification_center import get_notification_center
+    data = await request.json()
+    mode = str(data.get("mode", "READ"))
+    nc = get_notification_center()
+    return JSONResponse(content=nc.clear_notifications(mode=mode))
+
+
+@app.post("/api/notifications/preferences")
+async def api_update_notification_preferences(request: Request):
+    from notification_center import get_notification_center
+    data = await request.json()
+    nc = get_notification_center()
+    return JSONResponse(content=nc.update_preferences(data))
+
+
+@app.post("/api/notifications/action")
+async def api_execute_notification_action(request: Request):
+    from notification_center import get_notification_center
+    data = await request.json()
+    notif_id = str(data.get("notif_id", ""))
+    action_id = str(data.get("action_id", ""))
+    nc = get_notification_center()
+    return JSONResponse(content=nc.execute_action(notif_id, action_id))
+
 
 
 # ── MULTI-CHANNEL GATEWAYS API ──────────────────────────────────────────────
@@ -2140,6 +2246,14 @@ def dashboard():
                 </span>
             </div>
         </div>
+
+        <div class="stat-widget" style="cursor: pointer; border-color: rgba(56, 189, 248, 0.45); background: rgba(56, 189, 248, 0.08);" onclick="toggleNotificationDrawer()" title="Open Unified Notification Center">
+            <div class="stat-icon" id="top-stat-notif-icon">🔔</div>
+            <div class="stat-meta">
+                <span class="stat-label">Alert Center</span>
+                <span class="stat-val" id="top-stat-notif-badge" style="color: #38bdf8;">0 Unread</span>
+            </div>
+        </div>
     </div>
 
     <!-- TABS NAVIGATION HEADER -->
@@ -2162,6 +2276,7 @@ def dashboard():
             <button class="tab-btn" onclick="setTab('system')">⚡ System Health</button>
             <button class="tab-btn" onclick="setTab('browser')">🌐 Browser Extension</button>
             <button class="tab-btn" onclick="setTab('logs')">📜 Audit Trail</button>
+            <button class="tab-btn" style="border-color: rgba(56, 189, 248, 0.5); color: #38bdf8;" onclick="toggleNotificationDrawer()">🔔 Alerts <span id="nav-notif-pill" style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px;display:none;">0</span></button>
         </div>
     </div>
 
@@ -5087,7 +5202,242 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             toast.classList.add('show');
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
+
+        // ── UNIFIED MULTI-DEVICE NOTIFICATION CENTER CONTROLLER ─────────────
+        let currentNotifCategory = 'ALL';
+        let notifDrawerOpen = false;
+        let notifPrefsCache = {};
+
+        function toggleNotificationDrawer(forceState) {
+            const drawer = document.getElementById('notif-drawer');
+            const overlay = document.getElementById('notif-drawer-overlay');
+            if (!drawer || !overlay) return;
+            notifDrawerOpen = typeof forceState === 'boolean' ? forceState : !notifDrawerOpen;
+            drawer.style.transform = notifDrawerOpen ? 'translateX(0)' : 'translateX(105%)';
+            overlay.style.display = notifDrawerOpen ? 'block' : 'none';
+            if (notifDrawerOpen) {
+                refreshNotifications();
+            }
+        }
+
+        function setNotifCategory(cat, btnEl) {
+            currentNotifCategory = cat;
+            document.querySelectorAll('.notif-cat-chip').forEach(b => {
+                b.style.background = 'rgba(255,255,255,0.05)';
+                b.style.borderColor = 'rgba(255,255,255,0.12)';
+                b.style.color = '#94a3b8';
+            });
+            if (btnEl) {
+                btnEl.style.background = 'rgba(56, 189, 248, 0.2)';
+                btnEl.style.borderColor = '#38bdf8';
+                btnEl.style.color = '#38bdf8';
+            }
+            refreshNotifications();
+        }
+
+        async function refreshNotifications() {
+            try {
+                const unreadOnly = currentNotifCategory === 'UNREAD';
+                const catParam = (currentNotifCategory !== 'ALL' && currentNotifCategory !== 'UNREAD') ? `&category=${encodeURIComponent(currentNotifCategory)}` : '';
+                const res = await fetch(`/api/notifications?unread_only=${unreadOnly}${catParam}&limit=60`);
+                const data = await res.json();
+                const unread = data.unread_count || 0;
+                notifPrefsCache = data.preferences || {};
+
+                // Update top stat widget & nav pill
+                const topBadge = document.getElementById('top-stat-notif-badge');
+                const topIcon = document.getElementById('top-stat-notif-icon');
+                const navPill = document.getElementById('nav-notif-pill');
+                const drawerCount = document.getElementById('notif-drawer-unread');
+
+                if (topBadge) {
+                    topBadge.innerText = unread > 0 ? `${unread} Unread` : 'All Clear';
+                    topBadge.style.color = unread > 0 ? '#fbbf24' : '#10b981';
+                }
+                if (topIcon) {
+                    topIcon.innerText = notifPrefsCache.dnd_enabled ? '🌙' : (unread > 0 ? '🔔' : '🔕');
+                }
+                if (navPill) {
+                    navPill.style.display = unread > 0 ? 'inline-block' : 'none';
+                    navPill.innerText = String(unread);
+                }
+                if (drawerCount) {
+                    drawerCount.innerText = `${unread} Unread / ${data.total_count || 0} Total`;
+                }
+
+                // Sync preference toggles
+                const syncToggle = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.style.background = val ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255,255,255,0.05)';
+                        el.style.borderColor = val ? '#10b981' : 'rgba(255,255,255,0.12)';
+                        el.style.color = val ? '#10b981' : '#94a3b8';
+                    }
+                };
+                syncToggle('pref-btn-dnd', !!notifPrefsCache.dnd_enabled);
+                syncToggle('pref-btn-toast', notifPrefsCache.pc_toast_enabled !== false);
+                syncToggle('pref-btn-sound', notifPrefsCache.sound_enabled !== false);
+                syncToggle('pref-btn-watch', notifPrefsCache.watch_haptics_enabled !== false);
+
+                renderNotificationList(data.notifications || []);
+            } catch (e) {}
+        }
+
+        function renderNotificationList(items) {
+            const container = document.getElementById('notif-list-container');
+            if (!container) return;
+            if (!items.length) {
+                container.innerHTML = `<div style="text-align:center;padding:40px 16px;color:#64748b;font-size:13px;">🔕 No notifications in this view.<br/><span style="font-size:11px;">Click <b>⚡ Test Multi-Device Alert</b> above to verify PC Toast + Watch/Phone Haptics.</span></div>`;
+                return;
+            }
+            const priColors = {
+                'CRITICAL': { bg: 'rgba(239,68,68,0.16)', border: '#ef4444', text: '#fca5a5' },
+                'HIGH': { bg: 'rgba(245,158,11,0.16)', border: '#f59e0b', text: '#fcd34d' },
+                'NORMAL': { bg: 'rgba(16,185,129,0.14)', border: '#10b981', text: '#6ee7b7' },
+                'LOW': { bg: 'rgba(56,189,248,0.14)', border: '#38bdf8', text: '#bae6fd' },
+            };
+            container.innerHTML = items.map(n => {
+                const c = priColors[n.priority] || priColors['NORMAL'];
+                const ts = String(n.timestamp || '').slice(0, 19).replace('T', ' ');
+                const surfBadges = (n.surfaces || []).map(s =>
+                    `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,0.06);color:#94a3b8;font-family:monospace;">${s}</span>`
+                ).join(' ');
+                const actBtns = (n.actions || []).map(a => {
+                    const isDanger = a.style === 'danger';
+                    const bg = isDanger ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)';
+                    const brd = isDanger ? '#ef4444' : '#10b981';
+                    const col = isDanger ? '#fca5a5' : '#6ee7b7';
+                    return `<button onclick="triggerNotifAction('${n.id}', '${a.id}')" style="cursor:pointer;padding:4px 10px;font-size:11px;font-weight:700;border-radius:5px;background:${bg};border:1px solid ${brd};color:${col};">${a.label}</button>`;
+                }).join(' ');
+                return `
+                    <div style="padding:12px;border-radius:8px;margin-bottom:8px;background:${n.read ? 'rgba(15,23,42,0.55)' : 'rgba(15,23,42,0.95)'};border:1px solid ${n.read ? 'rgba(255,255,255,0.08)' : c.border};border-left:4px solid ${c.border};">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px;">
+                            <div style="font-size:12px;font-weight:800;color:#f8fafc;">${n.icon || '🔔'} ${n.title}</div>
+                            <span style="font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:${c.bg};color:${c.text};border:1px solid ${c.border};">${n.priority}</span>
+                        </div>
+                        <div style="font-size:11.5px;color:#cbd5e1;line-height:1.45;margin-bottom:8px;">${n.body}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                                <span style="font-size:10px;color:#64748b;font-family:monospace;">${ts} • ${n.role}</span>
+                                ${surfBadges}
+                            </div>
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                ${actBtns}
+                                ${!n.read ? `<button onclick="markNotifRead('${n.id}')" style="cursor:pointer;padding:3px 8px;font-size:10px;border-radius:4px;background:rgba(56,189,248,0.14);border:1px solid rgba(56,189,248,0.35);color:#38bdf8;">✓ Read</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function markNotifRead(notifId) {
+            await fetch('/api/notifications/read', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ notif_id: notifId || 'ALL' })
+            });
+            refreshNotifications();
+        }
+
+        async function clearReadNotifications() {
+            await fetch('/api/notifications/clear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: 'READ' })
+            });
+            refreshNotifications();
+            showToast('🗑️ Cleared read notifications');
+        }
+
+        async function toggleNotifPref(key) {
+            const nextVal = !notifPrefsCache[key];
+            await fetch('/api/notifications/preferences', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ [key]: nextVal })
+            });
+            refreshNotifications();
+            showToast(`Updated ${key}: ${nextVal ? 'ON' : 'OFF'}`);
+        }
+
+        async function triggerNotifAction(notifId, actionId) {
+            const res = await fetch('/api/notifications/action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ notif_id: notifId, action_id: actionId })
+            });
+            const data = await res.json();
+            showToast('⚡ ' + (data.message || data.action_id || 'Action executed'));
+            refreshNotifications();
+        }
+
+        async function sendTestMultiDeviceAlert() {
+            const res = await fetch('/api/notifications/send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: '⚡ Hermes Sovereign Multi-Device Alert',
+                    body: 'Simultaneous dispatch verified across Windows 11 Toast, Dashboard, Smartwatch (/watch), Smartphone (/phone), and Laptop (/laptop).',
+                    priority: 'HIGH',
+                    category: 'DEAL_ALERT',
+                    role: 'CEO',
+                    actions: [
+                        { id: 'open_chintu', label: '🌐 Open Slickdeals in Chintu', url: 'https://slickdeals.net/', style: 'primary' }
+                    ]
+                })
+            });
+            const data = await res.json();
+            showToast('🔔 Sent to: ' + ((data.delivered_surfaces || []).join(', ') || 'All Surfaces'));
+            refreshNotifications();
+        }
+
+        // Poll notifications every 6 seconds to keep badge & drawer synchronized
+        setInterval(refreshNotifications, 6000);
+        setTimeout(refreshNotifications, 400);
     </script>
+
+    <!-- SLIDE-OVER UNIFIED MULTI-DEVICE NOTIFICATION CENTER DRAWER -->
+    <div id="notif-drawer-overlay" onclick="toggleNotificationDrawer(false)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);z-index:9998;"></div>
+    <div id="notif-drawer" style="position:fixed;top:0;right:0;bottom:0;width:440px;max-width:94vw;background:#0a0f16;border-left:1px solid rgba(56,189,248,0.35);box-shadow:-12px 0 40px rgba(0,0,0,0.75);z-index:9999;transform:translateX(105%);transition:transform 0.25s cubic-bezier(0.16,1,0.3,1);display:flex;flex-direction:column;">
+        <div style="padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,0.85);">
+            <div>
+                <div style="font-size:15px;font-weight:800;color:#f8fafc;display:flex;align-items:center;gap:8px;">
+                    🔔 Unified Notification Center
+                </div>
+                <div id="notif-drawer-unread" style="font-size:11px;color:#38bdf8;font-family:monospace;margin-top:2px;">0 Unread</div>
+            </div>
+            <button onclick="toggleNotificationDrawer(false)" style="cursor:pointer;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;">✕ Close</button>
+        </div>
+
+        <!-- Surface & Acoustic Preferences Bar -->
+        <div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,0.28);display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <button id="pref-btn-dnd" onclick="toggleNotifPref('dnd_enabled')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#94a3b8;">🌙 DND</button>
+            <button id="pref-btn-toast" onclick="toggleNotifPref('pc_toast_enabled')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#10b981;">🖥️ Win11 Toast</button>
+            <button id="pref-btn-sound" onclick="toggleNotifPref('sound_enabled')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#10b981;">🔊 Chime</button>
+            <button id="pref-btn-watch" onclick="toggleNotifPref('watch_haptics_enabled')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;border:1px solid #10b981;background:rgba(16,185,129,0.22);color:#10b981;">⌚ Watch Haptics</button>
+        </div>
+
+        <!-- Action Buttons Row -->
+        <div style="padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;gap:6px;flex-wrap:wrap;">
+            <button onclick="sendTestMultiDeviceAlert()" style="cursor:pointer;flex:1;padding:6px 10px;font-size:11px;font-weight:800;border-radius:6px;background:rgba(56,189,248,0.18);border:1px solid #38bdf8;color:#38bdf8;">⚡ Test Multi-Device Alert</button>
+            <button onclick="markNotifRead('ALL')" style="cursor:pointer;padding:6px 10px;font-size:11px;font-weight:700;border-radius:6px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#10b981;">✓ Mark All Read</button>
+            <button onclick="clearReadNotifications()" style="cursor:pointer;padding:6px 10px;font-size:11px;font-weight:700;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;">🗑️ Clear Read</button>
+        </div>
+
+        <!-- Category Filter Chips -->
+        <div style="padding:8px 16px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;gap:5px;flex-wrap:wrap;">
+            <button class="notif-cat-chip" onclick="setNotifCategory('ALL', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(56,189,248,0.2);border:1px solid #38bdf8;color:#38bdf8;">All</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('UNREAD', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">Unread</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('SECURITY_BLOCK', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">🛡️ Security</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('DEAL_ALERT', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">🛍️ Deals</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('ROSTER_COMPLETE', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">👥 Roster</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('SMART_SHUTDOWN', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">🌙 Power</button>
+        </div>
+
+        <!-- Scrollable Notification Feed -->
+        <div id="notif-list-container" style="flex:1;overflow-y:auto;padding:12px 16px;"></div>
+    </div>
 </body>
 </html>
 """

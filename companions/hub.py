@@ -743,13 +743,17 @@ class OmniMeshHub:
 
     def notify_all(self, title: str, body: str, vibrate: bool = True):
         """Sends notification and optional vibration pattern to all companion devices."""
-        asyncio.create_task(self.broadcast_event({
-            "type": "notification",
-            "title": title,
-            "body": body,
-            "vibrate": [150, 80, 150] if vibrate else [],
-            "timestamp": time.time(),
-        }))
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.broadcast_event({
+                "type": "notification",
+                "title": title,
+                "body": body,
+                "vibrate": [150, 80, 150] if vibrate else [],
+                "timestamp": time.time(),
+            }))
+        except RuntimeError:
+            pass
 
     def get_status_overview(self) -> Dict[str, Any]:
         """Returns serializable overview of the mesh ecosystem and auth status."""

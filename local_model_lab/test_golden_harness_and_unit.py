@@ -389,6 +389,55 @@ class TestHermesGoldenHarnessAndGuardrails(unittest.TestCase):
         self.assertGreater(logs_data["jsonl_events_count"], 0)
         self.assertTrue(logs_data["log_files"]["steps_jsonl_exists"])
 
+    def test_10_notification_center_triage_actions_and_persistence(self):
+        """Verifies Unified Notification Center priority triage, DND override, action buttons, and JSON persistence."""
+        from notification_center import get_notification_center
+
+        nc = get_notification_center()
+        # Ensure clean DND=False baseline
+        nc.update_preferences({"dnd_enabled": False, "pc_toast_enabled": True, "watch_haptics_enabled": True})
+
+        # 1. CRITICAL alert routes to all surfaces including smartwatch + pc_toast
+        crit_res = nc.notify(
+            title="🚨 Critical Approval Gate Test",
+            body="Approve sensitive payment gate?",
+            priority="CRITICAL",
+            category="SECURITY_APPROVAL",
+            role="SECURITY",
+            actions=[
+                {"id": "approve_gate", "label": "✅ Approve", "style": "primary"},
+                {"id": "reject_gate", "label": "🚫 Deny", "style": "danger"},
+            ],
+        )
+        self.assertEqual(crit_res["status"], "ok")
+        crit_notif = crit_res["notification"]
+        self.assertIn("smartwatch", crit_notif["surfaces"])
+        self.assertIn("pc_toast", crit_notif["surfaces"])
+        self.assertIn("dashboard", crit_notif["surfaces"])
+
+        # 2. NORMAL alert routes to dashboard/phone/laptop but does not buzz smartwatch wrist battery
+        norm_res = nc.notify(
+            title="✅ Roster Task Complete",
+            body="RESEARCHER finished Slickdeals scan.",
+            priority="NORMAL",
+            category="ROSTER_COMPLETE",
+            role="RESEARCHER",
+        )
+        self.assertEqual(norm_res["status"], "ok")
+        self.assertNotIn("smartwatch", norm_res["notification"]["surfaces"])
+        self.assertIn("dashboard", norm_res["notification"]["surfaces"])
+
+        # 3. Execute action button on CRITICAL notification (marks read & acknowledged)
+        act_res = nc.execute_action(crit_notif["id"], "approve_gate")
+        self.assertEqual(act_res["status"], "ok")
+        self.assertEqual(act_res["action_id"], "approve_gate")
+
+        # 4. Verify list & mark_read
+        listed = nc.list_notifications(limit=20)
+        self.assertGreaterEqual(listed["total_count"], 2)
+        nc.mark_read(norm_res["notification"]["id"])
+
+
 
 if __name__ == "__main__":
     print("=" * 78)

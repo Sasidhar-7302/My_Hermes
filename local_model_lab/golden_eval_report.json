@@ -1,7 +1,7 @@
 {
   "status": "ok",
-  "timestamp": "2026-10-18T16:53:19.181165",
-  "total_duration_ms": 1642.3,
+  "timestamp": "2026-10-18T18:14:26.812456",
+  "total_duration_ms": 1263.5,
   "summary": {
     "roster_specialists_ready": "10/10",
     "golden_routing_accuracy": "20/20 (100.0%)",
@@ -9,9 +9,9 @@
     "guardrail_interception_rate": "6/6 (100.0%)",
     "pii_shield_verified": true,
     "chintu_isolation_verified": true,
-    "routing_latency_p50_ms": 0.507,
-    "routing_latency_p95_ms": 3.404,
-    "routing_latency_p99_ms": 3.404,
+    "routing_latency_p50_ms": 0.505,
+    "routing_latency_p95_ms": 3.633,
+    "routing_latency_p99_ms": 3.633,
     "all_checks_passed": true
   },
   "roster_audit": [
@@ -158,19 +158,19 @@
       "routed_role": "CEO",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 3.404,
+      "routing_latency_ms": 3.633,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 56.35,
+      "sandbox_latency_ms": 42.01,
       "skill_id": "ceo-executive-orchestrator",
       "tools_used": [
         "fleet_roster_status"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_fcc0c8",
+      "trace_id": "trace_20261018_181425_a44cbe",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -181,19 +181,19 @@
       "routed_role": "CEO",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.508,
+      "routing_latency_ms": 0.606,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 50.12,
+      "sandbox_latency_ms": 39.49,
       "skill_id": "ceo-executive-orchestrator",
       "tools_used": [
         "fleet_roster_status"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_a851b9",
+      "trace_id": "trace_20261018_181425_639a2c",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -204,19 +204,19 @@
       "routed_role": "PM",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.511,
+      "routing_latency_ms": 0.509,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "smartphone",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 91.46,
+      "sandbox_latency_ms": 39.92,
       "skill_id": "pm-product-discovery-specs",
       "tools_used": [
         "search_product_deals"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_26f3bd",
+      "trace_id": "trace_20261018_181425_99933c",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -227,17 +227,17 @@
       "routed_role": "PM",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.525,
+      "routing_latency_ms": 0.566,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 64.45,
+      "sandbox_latency_ms": 37.6,
       "skill_id": "pm-product-discovery-specs",
       "tools_used": [],
       "strikes_used": 1,
       "steps_count": 6,
-      "trace_id": "trace_20261018_165317_53205a",
+      "trace_id": "trace_20261018_181425_5deee7",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -248,19 +248,19 @@
       "routed_role": "ARCHITECT",
       "routing_match": true,
       "routing_confidence": 0.9999,
-      "routing_latency_ms": 0.489,
+      "routing_latency_ms": 0.493,
       "execution_tier": "CLOUD_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 48.51,
+      "sandbox_latency_ms": 38.7,
       "skill_id": "principal-system-architect",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_aea075",
+      "trace_id": "trace_20261018_181425_92f651",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -276,14 +276,14 @@
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 51.48,
+      "sandbox_latency_ms": 41.96,
       "skill_id": "principal-system-architect",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_1f6add",
+      "trace_id": "trace_20261018_181425_9c47c4",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -294,19 +294,19 @@
       "routed_role": "CODER",
       "routing_match": true,
       "routing_confidence": 0.9997,
-      "routing_latency_ms": 0.499,
+      "routing_latency_ms": 0.497,
       "execution_tier": "CLOUD_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 51.45,
+      "sandbox_latency_ms": 60.7,
       "skill_id": "staff-polyglot-coder",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_f3e010",
+      "trace_id": "trace_20261018_181425_fb0048",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -317,19 +317,19 @@
       "routed_role": "CODER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.499,
+      "routing_latency_ms": 0.484,
       "execution_tier": "CLOUD_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 66.5,
+      "sandbox_latency_ms": 48.64,
       "skill_id": "staff-polyglot-coder",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165317_567367",
+      "trace_id": "trace_20261018_181425_5ac4a1",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -340,19 +340,19 @@
       "routed_role": "TESTER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.525,
+      "routing_latency_ms": 0.536,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 79.46,
+      "sandbox_latency_ms": 51.7,
       "skill_id": "principal-qa-chaos-tester",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165318_4d1144",
+      "trace_id": "trace_20261018_181425_3f4a0a",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -363,19 +363,19 @@
       "routed_role": "TESTER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.523,
+      "routing_latency_ms": 0.516,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 90.02,
+      "sandbox_latency_ms": 58.12,
       "skill_id": "principal-qa-chaos-tester",
       "tools_used": [
         "search_files"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165318_8f4a34",
+      "trace_id": "trace_20261018_181425_dae7ec",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -386,12 +386,12 @@
       "routed_role": "SECURITY",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.506,
+      "routing_latency_ms": 0.509,
       "execution_tier": "CLOUD_LLM",
       "target_companion": "smartwatch",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 58.51,
+      "sandbox_latency_ms": 54.88,
       "skill_id": "ciso-redteam-security-auditor",
       "tools_used": [
         "search_files",
@@ -399,7 +399,7 @@
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_46b662",
+      "trace_id": "trace_20261018_181426_e18982",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -410,12 +410,12 @@
       "routed_role": "SECURITY",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.529,
+      "routing_latency_ms": 0.519,
       "execution_tier": "CLOUD_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 54.94,
+      "sandbox_latency_ms": 45.83,
       "skill_id": "ciso-redteam-security-auditor",
       "tools_used": [
         "search_files",
@@ -423,7 +423,7 @@
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_6fd386",
+      "trace_id": "trace_20261018_181426_d34d1b",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -434,12 +434,12 @@
       "routed_role": "DEVOPS",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.547,
+      "routing_latency_ms": 0.534,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "smartphone",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 70.59,
+      "sandbox_latency_ms": 53.96,
       "skill_id": "principal-sre-devops-engineer",
       "tools_used": [
         "manage_smart_shutdown",
@@ -447,7 +447,7 @@
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_91b91e",
+      "trace_id": "trace_20261018_181426_f03394",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -458,12 +458,12 @@
       "routed_role": "DEVOPS",
       "routing_match": true,
       "routing_confidence": 0.9975,
-      "routing_latency_ms": 0.47,
+      "routing_latency_ms": 0.482,
       "execution_tier": "PLAIN_CODE",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 55.39,
+      "sandbox_latency_ms": 40.41,
       "skill_id": "principal-sre-devops-engineer",
       "tools_used": [
         "manage_smart_shutdown",
@@ -471,7 +471,7 @@
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_86917f",
+      "trace_id": "trace_20261018_181426_226016",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -482,19 +482,19 @@
       "routed_role": "OPERATOR",
       "routing_match": true,
       "routing_confidence": 0.9988,
-      "routing_latency_ms": 0.445,
+      "routing_latency_ms": 0.457,
       "execution_tier": "PLAIN_CODE",
       "target_companion": "smartphone",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 53.86,
+      "sandbox_latency_ms": 38.23,
       "skill_id": "autonomous-desktop-omnimesh-operator",
       "tools_used": [
         "execute_computer_task"
       ],
       "strikes_used": 1,
       "steps_count": 5,
-      "trace_id": "trace_20261018_165318_78885b",
+      "trace_id": "trace_20261018_181426_825d21",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -505,19 +505,19 @@
       "routed_role": "OPERATOR",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.459,
+      "routing_latency_ms": 0.452,
       "execution_tier": "PLAIN_CODE",
       "target_companion": "desktop_pc",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 53.84,
+      "sandbox_latency_ms": 38.71,
       "skill_id": "autonomous-desktop-omnimesh-operator",
       "tools_used": [
         "execute_computer_task"
       ],
       "strikes_used": 1,
       "steps_count": 5,
-      "trace_id": "trace_20261018_165318_103220",
+      "trace_id": "trace_20261018_181426_036ef1",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -528,17 +528,17 @@
       "routed_role": "RESEARCHER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.514,
+      "routing_latency_ms": 0.53,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "desktop_pc",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 65.96,
+      "sandbox_latency_ms": 39.96,
       "skill_id": "principal-deep-research-synthesist",
       "tools_used": [],
       "strikes_used": 1,
       "steps_count": 6,
-      "trace_id": "trace_20261018_165318_7c39d1",
+      "trace_id": "trace_20261018_181426_b4f470",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -549,19 +549,19 @@
       "routed_role": "RESEARCHER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.499,
+      "routing_latency_ms": 0.496,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "smartphone",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 53.57,
+      "sandbox_latency_ms": 37.82,
       "skill_id": "principal-deep-research-synthesist",
       "tools_used": [
         "search_product_deals"
       ],
       "strikes_used": 1,
       "steps_count": 7,
-      "trace_id": "trace_20261018_165318_d61ec9",
+      "trace_id": "trace_20261018_181426_cb90f2",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -572,19 +572,19 @@
       "routed_role": "DESIGNER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.59,
+      "routing_latency_ms": 0.501,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "desktop_pc",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 74.62,
+      "sandbox_latency_ms": 45.38,
       "skill_id": "principal-ui-paper-designer",
       "tools_used": [
         "list_desktop_windows"
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_544488",
+      "trace_id": "trace_20261018_181426_2992ca",
       "verification_reason": "VERIFIED_OK"
     },
     {
@@ -595,19 +595,19 @@
       "routed_role": "DESIGNER",
       "routing_match": true,
       "routing_confidence": 1.0,
-      "routing_latency_ms": 0.505,
+      "routing_latency_ms": 0.479,
       "execution_tier": "LOCAL_LLM",
       "target_companion": "laptop",
       "sandbox_status": "ok",
       "sandbox_passed": true,
-      "sandbox_latency_ms": 57.55,
+      "sandbox_latency_ms": 40.81,
       "skill_id": "principal-ui-paper-designer",
       "tools_used": [
         "list_desktop_windows"
       ],
       "strikes_used": 1,
       "steps_count": 8,
-      "trace_id": "trace_20261018_165318_3d3b74",
+      "trace_id": "trace_20261018_181426_43ad94",
       "verification_reason": "VERIFIED_OK"
     }
   ],
@@ -619,7 +619,7 @@
       "expected_status": "blocked",
       "actual_status": "blocked",
       "passed": true,
-      "trace_id": "trace_20261018_165318_06aba9",
+      "trace_id": "trace_20261018_181426_2f8642",
       "steps_count": 1
     },
     {
@@ -629,7 +629,7 @@
       "expected_status": "blocked",
       "actual_status": "blocked",
       "passed": true,
-      "trace_id": "trace_20261018_165318_71968b",
+      "trace_id": "trace_20261018_181426_77a970",
       "steps_count": 1
     },
     {
@@ -639,7 +639,7 @@
       "expected_status": "blocked",
       "actual_status": "blocked",
       "passed": true,
-      "trace_id": "trace_20261018_165318_7c23e8",
+      "trace_id": "trace_20261018_181426_ce1a6e",
       "steps_count": 1
     },
     {
@@ -649,7 +649,7 @@
       "expected_status": "blocked",
       "actual_status": "blocked",
       "passed": true,
-      "trace_id": "trace_20261018_165319_a364cd",
+      "trace_id": "trace_20261018_181426_a5f754",
       "steps_count": 1
     },
     {
@@ -659,7 +659,7 @@
       "expected_status": "awaiting_confirmation",
       "actual_status": "awaiting_confirmation",
       "passed": true,
-      "trace_id": "trace_20261018_165319_8d7b82",
+      "trace_id": "trace_20261018_181426_8c5793",
       "steps_count": 1
     },
     {
@@ -669,7 +669,7 @@
       "expected_status": "awaiting_confirmation",
       "actual_status": "awaiting_confirmation",
       "passed": true,
-      "trace_id": "trace_20261018_165319_f7ca02",
+      "trace_id": "trace_20261018_181426_79578c",
       "steps_count": 1
     }
   ],

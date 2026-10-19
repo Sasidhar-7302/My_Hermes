@@ -277,6 +277,46 @@ def log_task(
             "verified": verified,
             "task": task[:200],
         })
+
+        # Emit Unified Notification Center alert (unless running inside automated pytest suite)
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            try:
+                from notification_center import get_notification_center
+                nc = get_notification_center()
+                if model == "hardline_guard" or str(response).startswith("[BLOCKED]"):
+                    nc.notify(
+                        title=f"🛡️ Safety Shield Blocked ({role})",
+                        body=str(response)[:220],
+                        priority="HIGH",
+                        category="SECURITY_BLOCK",
+                        role=role,
+                        metadata={"trace_id": entry["trace_id"], "task": task[:140]},
+                    )
+                elif model == "telegram_gate" or str(response).startswith("[AWAITING"):
+                    nc.notify(
+                        title=f"🚨 Approval Required ({role})",
+                        body=str(response)[:220],
+                        priority="CRITICAL",
+                        category="SECURITY_APPROVAL",
+                        role=role,
+                        actions=[
+                            {"id": "approve_gate", "label": "✅ Approve", "style": "primary"},
+                            {"id": "reject_gate", "label": "🚫 Deny", "style": "danger"},
+                        ],
+                        metadata={"trace_id": entry["trace_id"], "task": task[:140]},
+                    )
+                elif nc.get_preferences().get("auto_notify_roster_tasks", True):
+                    role_title = ROLES.get(role, {}).get("title", role)
+                    nc.notify(
+                        title=f"{role} ({role_title}) Completed Mission",
+                        body=f"Task: {task[:90]} • {latency}ms via {model} ({entry['steps_count']} steps)",
+                        priority="NORMAL",
+                        category="ROSTER_COMPLETE",
+                        role=role,
+                        metadata={"trace_id": entry["trace_id"], "latency_ms": latency, "model": model},
+                    )
+            except Exception:
+                pass
     except Exception:
         pass
     return entry
