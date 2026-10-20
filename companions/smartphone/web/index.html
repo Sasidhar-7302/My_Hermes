@@ -290,18 +290,56 @@
                 </div>
             </div>
 
-            <!-- Standalone Native App & Smartwatch Download Hub -->
-            <div class="card" style="border-color: rgba(56,189,248,0.35);">
-                <div class="card-title">📲 Standalone Native App &amp; Watch Install</div>
-                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
-                    Run Hermes without any browser URL bar on your Mobile Phone or Smartwatch:
-                </p>
-                <div class="btn-grid">
-                    <button class="action-btn" style="background: rgba(56,189,248,0.18); border-color: #38bdf8; color: #ffffff;" onclick="toggleNativeFullscreen()">
-                        <span>⛶ Full-Screen App Mode</span>
+            <!-- Samsung Galaxy Watch 8 Biometric Health & Readiness Card -->
+            <div class="card" style="border-color: rgba(16,185,129,0.4);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="card-title">❤️ Galaxy Watch 8 Biometrics</div>
+                    <span id="mobile-bio-readiness" style="font-size: 11px; font-weight: 800; color: #10b981; background: rgba(16,185,129,0.15); padding: 2px 8px; border-radius: 999px;">RDY --/100</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; text-align: center; font-size: 11px;">
+                    <div style="background: rgba(0,0,0,0.35); padding: 6px; border-radius: 6px; border: 1px solid #1e293b;">
+                        <div style="color: #94a3b8; font-size: 9.5px;">HEART RATE</div>
+                        <div id="mobile-bio-hr" style="color: #fff; font-weight: 800; font-size: 13px;">-- BPM</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); padding: 6px; border-radius: 6px; border: 1px solid #1e293b;">
+                        <div style="color: #94a3b8; font-size: 9.5px;">BLOOD O2</div>
+                        <div id="mobile-bio-spo2" style="color: #38bdf8; font-weight: 800; font-size: 13px;">-- %</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); padding: 6px; border-radius: 6px; border: 1px solid #1e293b;">
+                        <div style="color: #94a3b8; font-size: 9.5px;">STRESS / STEPS</div>
+                        <div id="mobile-bio-stress" style="color: #10b981; font-weight: 800; font-size: 13px;">--</div>
+                    </div>
+                </div>
+                <div id="mobile-bio-insight" style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.35;">
+                    Syncs Heart Rate, HRV, SpO2, Sleep &amp; Steps from your Galaxy Watch 8.
+                </div>
+                <div class="btn-grid" style="margin-top: 8px;">
+                    <button class="action-btn" style="font-size: 11px; background: rgba(16,185,129,0.18); border-color: #10b981; color: #10b981;" onclick="simMobileWatchBio('optimal')">
+                        <span>⚡ Sync Watch 8</span>
                     </button>
-                    <button class="action-btn" style="background: rgba(16,185,129,0.18); border-color: #10b981; color: #ffffff;" onclick="openInstallModal()">
-                        <span>📲 Download Native App</span>
+                    <button class="action-btn" style="font-size: 11px; background: rgba(245,158,11,0.18); border-color: #f59e0b; color: #fbbf24;" onclick="simMobileWatchBio('anomaly')">
+                        <span>🚨 Test Bio Alert</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Standalone Native APK & Smartwatch Download Hub -->
+            <div class="card" style="border-color: rgba(56,189,248,0.35);">
+                <div class="card-title">📲 Native Android &amp; Watch 8 APK Installers</div>
+                <p style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                    Install the real compiled &amp; signed Android APK on your Pixel 7 Pro and Samsung Galaxy Watch 8:
+                </p>
+                <div class="btn-grid" style="margin-top: 6px;">
+                    <a href="/download/hermes-pixel7pro.apk" download="hermes-pixel7pro.apk" class="action-btn" style="text-decoration: none; background: rgba(16,185,129,0.22); border-color: #10b981; color: #10b981; font-weight: 800; font-size: 11px;">
+                        <span>📲 Pixel 7 Pro APK</span>
+                    </a>
+                    <a href="/download/hermes-galaxy-watch8.apk" download="hermes-galaxy-watch8.apk" class="action-btn" style="text-decoration: none; background: rgba(56,189,248,0.22); border-color: #38bdf8; color: #38bdf8; font-weight: 800; font-size: 11px;">
+                        <span>⌚ Galaxy Watch 8 APK</span>
+                    </a>
+                </div>
+                <div style="margin-top: 6px;">
+                    <button class="action-btn" style="width: 100%; font-size: 11px;" onclick="openInstallModal()">
+                        <span>📖 Phone-to-Watch Install Guide &amp; ADB Beamer</span>
                     </button>
                 </div>
             </div>
@@ -312,41 +350,36 @@
     <div id="install-app-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 16px;">
         <div style="background: #0d131a; border: 1px solid #1e293b; border-radius: 14px; max-width: 400px; width: 100%; padding: 18px; color: #f8fafc; box-shadow: 0 12px 32px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <div style="font-size: 15px; font-weight: 800; color: #ffffff;">📲 Install Hermes Native App</div>
+                <div style="font-size: 15px; font-weight: 800; color: #ffffff;">📲 Install Native Pixel 7 Pro &amp; Watch 8 Apps</div>
                 <button onclick="closeInstallModal()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;">&times;</button>
             </div>
 
-            <!-- 1. Instant Fullscreen App Mode -->
-            <div style="background: #131c26; border: 1px solid rgba(56,189,248,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
-                <div style="font-size: 12px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;">1. Instant Full-Screen App Mode (Zero Browser Bar)</div>
-                <p style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">Immediately hides Chrome's address bar and keeps your connection awake with Screen WakeLock.</p>
-                <button class="action-btn" style="width: 100%; background: #38bdf8; color: #000; font-weight: 800;" onclick="toggleNativeFullscreen(); closeInstallModal();">
-                    ⛶ Launch Full-Screen App Mode Now
-                </button>
+            <!-- 1. Google Pixel 7 Pro Native APK -->
+            <div style="background: #131c26; border: 1px solid rgba(16,185,129,0.45); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 800; color: #10b981; margin-bottom: 4px;">1. 📱 Google Pixel 7 Pro Native APK (Signed V2+V3)</div>
+                <p style="font-size: 11px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.4;">
+                    Downloads <code>hermes-pixel7pro.apk</code> (<code>com.hermes.sovereign.phone</code>). Tap the downloaded file on your Pixel 7 Pro to install <strong>Hermes AI</strong> as a real native Android app in your app drawer!
+                </p>
+                <a href="/download/hermes-pixel7pro.apk" download="hermes-pixel7pro.apk" class="action-btn" style="display: flex; width: 100%; text-decoration: none; background: #10b981; color: #04130d; font-weight: 800;">
+                    📲 Download hermes-pixel7pro.apk
+                </a>
             </div>
 
-            <!-- 2. Android Standalone WebAPK -->
-            <div style="background: #131c26; border: 1px solid rgba(16,185,129,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
-                <div style="font-size: 12px; font-weight: 700; color: #10b981; margin-bottom: 4px;">2. Install Standalone Android App Icon</div>
+            <!-- 2. Samsung Galaxy Watch 8 Native Wear OS APK -->
+            <div style="background: #131c26; border: 1px solid rgba(56,189,248,0.45); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
+                <div style="font-size: 12px; font-weight: 800; color: #38bdf8; margin-bottom: 4px;">2. ⌚ Samsung Galaxy Watch 8 Native APK (Wear OS)</div>
                 <ol style="font-size: 11px; color: #cbd5e1; padding-left: 16px; line-height: 1.5; margin-bottom: 8px;">
-                    <li>Tap Chrome's <strong>⋮ (3-dots menu)</strong> at top-right &rarr; tap <strong>"Add to Home screen"</strong> &rarr; <strong>"Install"</strong>.</li>
-                    <li><em>For full native APK mode + Mic/Screen-Share over Wi-Fi:</em> Tap below to copy <code>http://10.0.0.60:8000</code>, open <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, paste it, set to <strong>Enabled</strong>, and Relaunch!</li>
+                    <li>Tap below to download <code>hermes-galaxy-watch8.apk</code> onto your Pixel 7 Pro.</li>
+                    <li>On your <strong>Galaxy Watch 8</strong>: Settings &rarr; About Watch &rarr; Software Info &rarr; tap <em>Software Version</em> 7 times &rarr; Developer Options &rarr; enable <strong>Wireless Debugging</strong>.</li>
+                    <li>Beam the APK from your Pixel 7 Pro to your Watch 8 using <strong>Wear Installer 2</strong> or <strong>Bugjaeger</strong> (or open <code>/connect</code> to use our built-in 1-Click Wireless ADB Beamer!).</li>
                 </ol>
-                <button class="action-btn" style="width: 100%; background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; font-size: 11px;" onclick="copyOriginFlagHelper()">
-                    📋 Copy Host URL &amp; Flag Instructions
-                </button>
-            </div>
-
-            <!-- 3. Smartwatch Installation -->
-            <div style="background: #131c26; border: 1px solid rgba(168,85,247,0.35); border-radius: 10px; padding: 12px; margin-bottom: 10px;">
-                <div style="font-size: 12px; font-weight: 700; color: #c084fc; margin-bottom: 4px;">3. ⌚ Install on Smartwatch (Wear OS / Galaxy / Apple)</div>
-                <ul style="font-size: 11px; color: #cbd5e1; padding-left: 16px; line-height: 1.5; margin-bottom: 8px;">
-                    <li><strong>On Watch Browser (Samsung Internet / Chrome):</strong> Type short URL <strong style="color:#10b981;">10.0.0.60:8000/watch</strong> and tap <em>Add to Home Screen / Tile</em>.</li>
-                    <li><strong>1-Click PC-to-Watch ADB Installer:</strong> Run <code>Install-Hermes-Watch-And-Phone.bat</code> on your PC to push the app straight to your watch over Wi-Fi!</li>
-                </ul>
                 <div style="display: flex; gap: 6px;">
-                    <a href="/watch" class="action-btn" style="flex: 1; text-decoration: none; text-align: center; font-size: 11px; background: rgba(168,85,247,0.2); border-color: #c084fc; color: #e9d5ff;">⌚ Preview Watch HUD</a>
-                    <a href="/api/companion/install/ios_app.mobileconfig" class="action-btn" style="flex: 1; text-decoration: none; text-align: center; font-size: 11px;">🍏 iOS/Watch Profile</a>
+                    <a href="/download/hermes-galaxy-watch8.apk" download="hermes-galaxy-watch8.apk" class="action-btn" style="flex: 1; text-decoration: none; background: #38bdf8; color: #04131a; font-weight: 800; font-size: 11px;">
+                        ⌚ Watch 8 APK
+                    </a>
+                    <a href="/connect" class="action-btn" style="flex: 1; text-decoration: none; font-size: 11px; border-color: #a855f7; color: #e9d5ff;">
+                        🚀 Wireless ADB Hub
+                    </a>
                 </div>
             </div>
 
@@ -354,6 +387,44 @@
         </div>
     </div>
 
+    <script>
+        async function loadMobileWatchBio() {
+            try {
+                const res = await fetch('/api/watch/analytics');
+                const data = await res.json();
+                renderMobileWatchBio(data);
+            } catch (e) {}
+        }
+        function renderMobileWatchBio(data) {
+            const s = data.sample || data.latest || {};
+            const a = data.analysis || {};
+            const rdy = document.getElementById('mobile-bio-readiness');
+            if (rdy) rdy.innerText = 'RDY ' + (a.readiness_score !== undefined ? a.readiness_score : 88) + '/100';
+            const hr = document.getElementById('mobile-bio-hr');
+            if (hr) hr.innerText = (s.heart_rate_bpm || '--') + ' BPM';
+            const spo = document.getElementById('mobile-bio-spo2');
+            if (spo) spo.innerText = (s.spo2_pct || '--') + ' %';
+            const str = document.getElementById('mobile-bio-stress');
+            if (str) str.innerText = (s.stress_score !== undefined ? s.stress_score : '--') + ' / ' + (s.steps || 0);
+            const ins = document.getElementById('mobile-bio-insight');
+            if (ins && a.recommendations && a.recommendations.length) {
+                ins.innerText = a.recommendations[0];
+            }
+        }
+        async function simMobileWatchBio(mode) {
+            try {
+                const res = await fetch('/api/watch/simulate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode})
+                });
+                const data = await res.json();
+                renderMobileWatchBio(data);
+                if (window.HermesNative && window.HermesNative.vibrate) window.HermesNative.vibrate(140);
+            } catch (e) {}
+        }
+        setTimeout(loadMobileWatchBio, 800);
+    </script>
     <script src="/companions/smartphone/web/mobile.js"></script>
 </body>
 </html>

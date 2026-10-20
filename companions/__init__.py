@@ -288,50 +288,231 @@ def register_companion_routes(app: FastAPI):
             headers={"Content-Disposition": 'attachment; filename="Hermes_Native_Apps.mobileconfig"'},
         )
 
+    @app.get("/download/hermes-pixel7pro.apk")
+    @app.get("/api/companion/install/hermes-pixel7pro.apk")
+    async def download_pixel7pro_apk():
+        """Serves the compiled & V2/V3-signed native Android APK for Google Pixel 7 Pro."""
+        from local_model_lab.apk_builder import APK_OUTPUT_DIR, build_all_hermes_apks
+        apk_path = APK_OUTPUT_DIR / "hermes-pixel7pro.apk"
+        if not apk_path.exists():
+            build_all_hermes_apks(host_ip=hub.lan_ip, port=hub.port)
+        return Response(
+            content=apk_path.read_bytes(),
+            media_type="application/vnd.android.package-archive",
+            headers={
+                "Content-Disposition": 'attachment; filename="hermes-pixel7pro.apk"',
+                "Cache-Control": "no-cache",
+            },
+        )
+
+    @app.get("/download/hermes-galaxy-watch8.apk")
+    @app.get("/api/companion/install/hermes-galaxy-watch8.apk")
+    async def download_galaxy_watch8_apk():
+        """Serves the compiled & V2/V3-signed native Wear OS APK for Samsung Galaxy Watch 8."""
+        from local_model_lab.apk_builder import APK_OUTPUT_DIR, build_all_hermes_apks
+        apk_path = APK_OUTPUT_DIR / "hermes-galaxy-watch8.apk"
+        if not apk_path.exists():
+            build_all_hermes_apks(host_ip=hub.lan_ip, port=hub.port)
+        return Response(
+            content=apk_path.read_bytes(),
+            media_type="application/vnd.android.package-archive",
+            headers={
+                "Content-Disposition": 'attachment; filename="hermes-galaxy-watch8.apk"',
+                "Cache-Control": "no-cache",
+            },
+        )
+
+    @app.post("/api/watch/telemetry")
+    async def ingest_watch_telemetry_route(request: Request):
+        """
+        Ingests live biometric & health sensor telemetry from Samsung Galaxy Watch 8
+        and Google Pixel 7 Pro, computes the Hermes BioActive Readiness Score (0-100),
+        and triggers proactive notifications if anomalies are detected.
+        """
+        from local_model_lab.watch_health_analyzer import get_watch_health_analyzer
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        analyzer = get_watch_health_analyzer()
+        result = analyzer.ingest_telemetry(data, trigger_notifications=True)
+        # Update Watch HUD state on hub as well
+        hub.watch_hud_state["biometrics"] = {
+            "readiness_score": result["analysis"]["readiness_score"],
+            "status_label": result["analysis"]["status_label"],
+            "heart_rate_bpm": result["sample"]["heart_rate_bpm"],
+            "spo2_pct": result["sample"]["spo2_pct"],
+            "stress_score": result["sample"]["stress_score"],
+            "steps": result["sample"]["steps"],
+            "watch_battery_pct": result["sample"]["watch_battery_pct"],
+            "updated_at": result["sample"]["iso_time"],
+        }
+        return JSONResponse(content=result)
+
+    @app.get("/api/watch/analytics")
+    async def get_watch_analytics_route():
+        """Returns the latest Samsung Galaxy Watch 8 & Pixel 7 Pro biometric analysis and history."""
+        from local_model_lab.watch_health_analyzer import get_watch_health_analyzer
+        analyzer = get_watch_health_analyzer()
+        return JSONResponse(content=analyzer.get_latest_analytics())
+
+    @app.post("/api/watch/simulate")
+    async def simulate_watch_telemetry_route(request: Request):
+        """
+        Simulates either an 'optimal' biometric sync or an 'anomaly' alert from Samsung Galaxy Watch 8
+        so the user can test biometric health analysis & proactive notifications with 1 click.
+        """
+        from local_model_lab.watch_health_analyzer import get_watch_health_analyzer
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        mode = str(body.get("mode", "optimal")).lower()
+        analyzer = get_watch_health_analyzer()
+        if mode == "anomaly":
+            sample = {
+                "device_model": "Samsung Galaxy Watch 8",
+                "phone_model": "Google Pixel 7 Pro",
+                "heart_rate_bpm": 136,
+                "resting_hr_bpm": 61,
+                "hrv_rmssd_ms": 24.0,
+                "spo2_pct": 92.0,
+                "stress_score": 86,
+                "sleep_score": 68,
+                "sleep_duration_hours": 5.4,
+                "deep_sleep_minutes": 38,
+                "rem_sleep_minutes": 55,
+                "steps": 6840,
+                "active_calories_kcal": 490,
+                "skin_temp_c": 36.9,
+                "watch_battery_pct": 78,
+                "phone_battery_pct": 84,
+                "is_wearing": True,
+                "activity_state": "resting",
+                "source": "watch8_biometric_simulation_anomaly",
+            }
+        else:
+            sample = {
+                "device_model": "Samsung Galaxy Watch 8",
+                "phone_model": "Google Pixel 7 Pro",
+                "heart_rate_bpm": 66,
+                "resting_hr_bpm": 58,
+                "hrv_rmssd_ms": 62.5,
+                "spo2_pct": 98.0,
+                "stress_score": 24,
+                "sleep_score": 89,
+                "sleep_duration_hours": 7.8,
+                "deep_sleep_minutes": 88,
+                "rem_sleep_minutes": 104,
+                "steps": 8420,
+                "active_calories_kcal": 560,
+                "skin_temp_c": 36.5,
+                "watch_battery_pct": 88,
+                "phone_battery_pct": 92,
+                "is_wearing": True,
+                "activity_state": "resting",
+                "source": "watch8_biometric_simulation_optimal",
+            }
+        # Reset cooldown on manual simulation so notification always fires when testing anomaly
+        if mode == "anomaly":
+            analyzer._last_alert_ts.clear()
+        result = analyzer.ingest_telemetry(sample, trigger_notifications=True)
+        return JSONResponse(content=result)
+
+    @app.post("/api/watch/adb_install")
+    async def api_watch_adb_install_route(request: Request):
+        """
+        1-Click Wireless ADB APK Installer for Samsung Galaxy Watch 8 or Google Pixel 7 Pro.
+        Connects (and optionally pairs) via ADB and installs the native signed APK.
+        """
+        from local_model_lab.apk_builder import APK_OUTPUT_DIR, build_all_hermes_apks
+        from local_model_lab.watch_health_analyzer import install_apk_via_wireless_adb
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        target_ip_port = str(data.get("target_ip_port", "")).strip()
+        device_type = str(data.get("device_type", "watch")).lower()
+        pair_ip_port = str(data.get("pair_ip_port", "")).strip() or None
+        pair_code = str(data.get("pair_code", "")).strip() or None
+
+        if not target_ip_port:
+            return JSONResponse(content={"ok": False, "error": "target_ip_port (e.g. 10.0.0.95:5555) is required"}, status_code=400)
+
+        apk_name = "hermes-galaxy-watch8.apk" if device_type == "watch" else "hermes-pixel7pro.apk"
+        apk_path = APK_OUTPUT_DIR / apk_name
+        if not apk_path.exists():
+            build_all_hermes_apks(host_ip=hub.lan_ip, port=hub.port)
+
+        res = install_apk_via_wireless_adb(
+            target_ip_port=target_ip_port,
+            apk_path=str(apk_path),
+            pair_ip_port=pair_ip_port,
+            pair_code=pair_code,
+        )
+        return JSONResponse(content=res)
+
     @app.get("/api/companion/install/watch_adb.bat")
     async def download_watch_adb_installer():
         """
-        Generates a 1-Click Windows Batch Installer for WearOS Smartwatches (Galaxy Watch, Pixel Watch)
-        and Android Smartphones over Wireless ADB. Configures Chrome to treat http://{hub.lan_ip}:{hub.port}
-        as a secure native origin and launches the standalone full-screen HUD on the watch/phone.
+        Generates a 1-Click Windows Batch Installer for Samsung Galaxy Watch 8 (Wear OS)
+        and Google Pixel 7 Pro over Wireless ADB. Installs the real signed native APK
+        (hermes-galaxy-watch8.apk / hermes-pixel7pro.apk) and launches the native app.
         """
-        from .auth import get_pairing_manager
-        pair_code = get_pairing_manager().create_pairing_code(ttl_seconds=86400 * 30)
         bat_content = f"""@echo off
-title Hermes Smartwatch & Android Native App Installer
+title Hermes Native APK Installer — Pixel 7 Pro ^& Samsung Galaxy Watch 8
 color 0B
+set ADB_EXE="%LOCALAPPDATA%\\Android\\Sdk\\platform-tools\\adb.exe"
+if not exist %ADB_EXE% set ADB_EXE=adb
+
 echo ============================================================================
-echo   HERMES OMNI-MESH: 1-CLICK SMARTWATCH (WEAR OS) ^& ANDROID APP INSTALLER
+echo   HERMES SOVEREIGN: NATIVE APK INSTALLER (PIXEL 7 PRO ^& GALAXY WATCH 8)
 echo   Host PC: http://{hub.lan_ip}:{hub.port}
 echo ============================================================================
 echo.
-echo   [HOW TO USE FOR SMARTWATCH (Galaxy Watch / Pixel Watch / Wear OS)]:
-echo   1. On your Watch: Settings -^> Developer Options -^> Enable "ADB Debugging"
-echo   2. Tap "Wireless debugging" on Watch and note the IP:Port (e.g. 10.0.0.95:5555)
-echo   (Or press ENTER to auto-configure your Android Phone at 10.0.0.84:5555)
+echo   [HOW TO ENABLE WIRELESS DEBUGGING ON SAMSUNG GALAXY WATCH 8]:
+echo   1. Watch Settings -^> About Watch -^> Software Info -^> Tap "Software Version" 7 times
+echo   2. Watch Settings -^> Developer Options -^> Enable "ADB Debugging"
+echo   3. Tap "Wireless Debugging" -^> Enable it and note the IP:Port (e.g. 10.0.0.95:38123)
 echo.
-set /p TARGET_ADDR="Enter Watch or Phone IP:Port [default: 10.0.0.84:5555]: "
+set /p PAIR_NEEDED="Do you need to enter a 6-digit Wireless Pairing Code first? [y/N]: "
+if /I "%PAIR_NEEDED%"=="Y" (
+    set /p PAIR_ADDR="Enter Pairing IP:Port shown under 'Pair new device': "
+    set /p PAIR_CODE="Enter 6-digit Pairing Code: "
+    %ADB_EXE% pair %PAIR_ADDR% %PAIR_CODE%
+)
+echo.
+set /p TARGET_ADDR="Enter Watch 8 or Pixel 7 Pro IP:Port [e.g. 10.0.0.95:5555]: "
 if "%TARGET_ADDR%"=="" set TARGET_ADDR=10.0.0.84:5555
 
 echo.
 echo [*] Connecting to %TARGET_ADDR% via Wireless ADB...
-adb connect %TARGET_ADDR%
-
-echo [*] Whitelisting Hermes Host (http://{hub.lan_ip}:{hub.port}) as a Native Secure Origin...
-adb -s %TARGET_ADDR% shell "echo 'chrome --unsafely-treat-insecure-origin-as-secure=http://{hub.lan_ip}:{hub.port} --no-first-run' > /data/local/tmp/chrome-command-line"
+%ADB_EXE% connect %TARGET_ADDR%
 
 echo.
-set /p DEV_MODE="Is this a Smartwatch (W) or Smartphone (P)? [W/P, default: W]: "
+set /p DEV_MODE="Install on Samsung Galaxy Watch 8 (W) or Google Pixel 7 Pro (P)? [W/P, default: W]: "
 if /I "%DEV_MODE%"=="P" (
-    echo [*] Launching Hermes Standalone Smartphone App on %TARGET_ADDR%...
-    adb -s %TARGET_ADDR% shell am start -a android.intent.action.VIEW -d "http://{hub.lan_ip}:{hub.port}/phone?pair={pair_code}"
+    echo [*] Installing Native Google Pixel 7 Pro APK (com.hermes.sovereign.phone)...
+    %ADB_EXE% -s %TARGET_ADDR% install -r "%USERPROFILE%\\.hermes\\apks\\hermes-pixel7pro.apk"
+    echo [*] Granting Sensor ^& Notification Permissions...
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.phone android.permission.BODY_SENSORS 2>nul
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.phone android.permission.ACTIVITY_RECOGNITION 2>nul
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.phone android.permission.POST_NOTIFICATIONS 2>nul
+    echo [*] Launching Hermes AI Native App on Pixel 7 Pro...
+    %ADB_EXE% -s %TARGET_ADDR% shell am start -n com.hermes.sovereign.phone/.MainActivity
 ) else (
-    echo [*] Launching Hermes Standalone Smartwatch HUD on %TARGET_ADDR%...
-    adb -s %TARGET_ADDR% shell am start -a android.intent.action.VIEW -d "http://{hub.lan_ip}:{hub.port}/watch?pair={pair_code}"
+    echo [*] Installing Native Samsung Galaxy Watch 8 APK (com.hermes.sovereign.watch)...
+    %ADB_EXE% -s %TARGET_ADDR% install -r "%USERPROFILE%\\.hermes\\apks\\hermes-galaxy-watch8.apk"
+    echo [*] Granting Watch 8 BioActive Sensor ^& Notification Permissions...
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.watch android.permission.BODY_SENSORS 2>nul
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.watch android.permission.ACTIVITY_RECOGNITION 2>nul
+    %ADB_EXE% -s %TARGET_ADDR% shell pm grant com.hermes.sovereign.watch android.permission.POST_NOTIFICATIONS 2>nul
+    echo [*] Launching Hermes Watch 8 Native App on Wrist...
+    %ADB_EXE% -s %TARGET_ADDR% shell am start -n com.hermes.sovereign.watch/.MainActivity
 )
 
 echo.
-echo [+] Done! Tap "Add to Home Screen" / "Install App" on your device for permanent icon.
+echo [+] Native APK Installed ^& Launched! Look for "Hermes AI" / "Hermes Watch" in your app drawer.
 pause
 """
         return Response(
@@ -367,8 +548,10 @@ pause
         from .auth import get_pairing_manager
         pm = get_pairing_manager()
         pair_code = pm.create_pairing_code(ttl_seconds=1800)
-        phone_qr = hub.get_pairing_qr("smartphone")
-        watch_qr = hub.get_pairing_qr("smartwatch")
+        phone_apk_url = f"http://{hub.lan_ip}:{hub.port}/download/hermes-pixel7pro.apk"
+        watch_apk_url = f"http://{hub.lan_ip}:{hub.port}/download/hermes-galaxy-watch8.apk"
+        phone_qr = generate_qr_code_png_base64(phone_apk_url)
+        watch_qr = generate_qr_code_png_base64(watch_apk_url)
         laptop_url = hub.get_companion_url("laptop", pairing_code=pair_code)
         return HTMLResponse(content=render_connect_hub_html(
             lan_ip=hub.lan_ip,

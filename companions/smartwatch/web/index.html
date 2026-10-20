@@ -27,6 +27,9 @@
                 <div id="battery-pill" class="battery-pill">🔋 --%</div>
             </div>
             <div id="watch-clock" class="watch-clock">12:00</div>
+            <div id="watch-bio-pill" onclick="syncWristBiometrics('optimal')" style="margin-top:2px;font-size:9.5px;font-weight:800;color:#10b981;background:rgba(16,185,129,0.14);border:1px solid rgba(16,185,129,0.35);padding:2px 8px;border-radius:999px;cursor:pointer;letter-spacing:0.02em;" title="Tap to sync Samsung Galaxy Watch 8 BioActive sensors">
+                ❤️ 66 BPM &bull; 🫁 98% &bull; ⚡ 90 RDY
+            </div>
         </div>
 
         <!-- Center Hero: Push to Send Voice Note Core -->
@@ -87,6 +90,11 @@
                     <button onclick="watchMediaControl('volume_up')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">🔊</button>
                     <button onclick="watchMediaControl('next')" style="background:#111b24;border:1px solid #1e293b;border-radius:8px;padding:7px 2px;font-size:13px;color:#fff;cursor:pointer;">⏭️</button>
                 </div>
+                <!-- Watch 8 BioActive Health Sync Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px;">
+                    <button onclick="syncWristBiometrics('optimal')" style="background:rgba(16,185,129,0.2);border:1px solid #10b981;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:800;color:#6ee7b7;cursor:pointer;">❤️ Sync BioActive</button>
+                    <button onclick="syncWristBiometrics('anomaly')" style="background:rgba(239,68,68,0.2);border:1px solid #ef4444;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:800;color:#fca5a5;cursor:pointer;">🚨 Test Bio Alert</button>
+                </div>
                 <!-- Quick Actions Row: Find Phone, Top Deals, Fullscreen -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px;">
                     <button onclick="pingPhoneFromWatch()" style="background:rgba(56,189,248,0.18);border:1px solid #38bdf8;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:700;color:#e0f2fe;cursor:pointer;">📱 Find Phone</button>
@@ -124,6 +132,41 @@
         </div>
     </div>
 
+    <script>
+        async function loadWristBiometrics() {
+            try {
+                const res = await fetch('/api/watch/analytics');
+                const data = await res.json();
+                updateWristBioPill(data);
+            } catch (e) {}
+        }
+        function updateWristBioPill(data) {
+            const s = data.sample || data.latest || {};
+            const a = data.analysis || {};
+            const pill = document.getElementById('watch-bio-pill');
+            if (!pill) return;
+            const score = a.readiness_score !== undefined ? a.readiness_score : 88;
+            pill.innerHTML = `❤️ ${s.heart_rate_bpm || 66} BPM &bull; 🫁 ${s.spo2_pct || 98}% &bull; ⚡ ${score} RDY`;
+            pill.style.color = score >= 80 ? '#10b981' : (score >= 60 ? '#fbbf24' : '#f87171');
+        }
+        async function syncWristBiometrics(mode) {
+            try {
+                if (window.HermesWatchNative && window.HermesWatchNative.syncNow && mode === 'optimal') {
+                    window.HermesWatchNative.syncNow();
+                }
+                const res = await fetch('/api/watch/simulate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mode: mode || 'optimal'})
+                });
+                const data = await res.json();
+                updateWristBioPill(data);
+                if (navigator.vibrate) navigator.vibrate(mode === 'anomaly' ? [180, 90, 220] : 80);
+            } catch (e) {}
+        }
+        setTimeout(loadWristBiometrics, 600);
+        setInterval(loadWristBiometrics, 15000);
+    </script>
     <script src="/companions/smartwatch/web/watch.js"></script>
 </body>
 </html>

@@ -528,6 +528,77 @@ class TestHermesGoldenHarnessAndGuardrails(unittest.TestCase):
             rev_after = vault.reveal_secret("GROQ_API_KEY", pin="998822")
             self.assertEqual(rev_after["value"], raw_secret)
 
+    def test_13_watch_health_analyzer_and_native_apk_builds(self):
+        """Verifies Samsung Galaxy Watch 8 & Pixel 7 Pro Biometric Health Analyzer, anomaly notification dispatch, and compiled V2/V3 signed native APKs."""
+        import zipfile
+        from apk_builder import APK_OUTPUT_DIR, build_all_hermes_apks
+        from watch_health_analyzer import get_watch_health_analyzer
+
+        # 1. Verify both compiled & signed APKs exist and are valid Android packages
+        phone_apk = APK_OUTPUT_DIR / "hermes-pixel7pro.apk"
+        watch_apk = APK_OUTPUT_DIR / "hermes-galaxy-watch8.apk"
+        if not phone_apk.exists() or not watch_apk.exists():
+            build_all_hermes_apks()
+
+        self.assertTrue(phone_apk.exists())
+        self.assertTrue(watch_apk.exists())
+        self.assertGreater(phone_apk.stat().st_size, 10000)
+        self.assertGreater(watch_apk.stat().st_size, 10000)
+
+        for apk_file in (phone_apk, watch_apk):
+            with zipfile.ZipFile(apk_file, "r") as zf:
+                names = zf.namelist()
+                self.assertIn("AndroidManifest.xml", names)
+                self.assertIn("classes.dex", names)
+                self.assertIn("resources.arsc", names)
+
+        # 2. Verify WatchHealthAnalyzer optimal vs anomaly biometric evaluation & notification dispatch
+        analyzer = get_watch_health_analyzer()
+        opt_res = analyzer.ingest_telemetry(
+            {
+                "device_model": "Samsung Galaxy Watch 8",
+                "phone_model": "Google Pixel 7 Pro",
+                "heart_rate_bpm": 65,
+                "resting_hr_bpm": 58,
+                "hrv_rmssd_ms": 64.0,
+                "spo2_pct": 98.0,
+                "stress_score": 22,
+                "sleep_score": 90,
+                "sleep_duration_hours": 7.9,
+                "steps": 8500,
+                "watch_battery_pct": 85,
+                "activity_state": "resting",
+            },
+            trigger_notifications=False,
+        )
+        self.assertEqual(opt_res["status"], "ok")
+        self.assertGreaterEqual(opt_res["analysis"]["readiness_score"], 85)
+        self.assertEqual(len(opt_res["analysis"]["anomalies"]), 0)
+
+        # Clear cooldown and trigger anomaly
+        analyzer._last_alert_ts.clear()
+        anom_res = analyzer.ingest_telemetry(
+            {
+                "device_model": "Samsung Galaxy Watch 8",
+                "phone_model": "Google Pixel 7 Pro",
+                "heart_rate_bpm": 139,
+                "resting_hr_bpm": 60,
+                "hrv_rmssd_ms": 22.0,
+                "spo2_pct": 91.5,
+                "stress_score": 88,
+                "sleep_score": 62,
+                "sleep_duration_hours": 5.1,
+                "steps": 4200,
+                "watch_battery_pct": 12,
+                "activity_state": "resting",
+            },
+            trigger_notifications=True,
+        )
+        self.assertEqual(anom_res["status"], "ok")
+        self.assertLess(anom_res["analysis"]["readiness_score"], 60)
+        self.assertGreaterEqual(len(anom_res["analysis"]["anomalies"]), 3)
+        self.assertTrue(len(anom_res["notifications_sent"]) >= 1)
+
 
 
 

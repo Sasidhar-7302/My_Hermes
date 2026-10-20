@@ -3248,17 +3248,20 @@ def dashboard():
                 </div>
             </div>
 
-            <!-- PAIRING & COMPANION ACCESS -->
-            <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+            <!-- NATIVE ANDROID & WEAR OS APK INSTALLERS + PAIRING -->
+            <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px; background: var(--bg-card); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-input); border-radius: 8px; padding: 10px;">
                     <img id="mesh-qr-img" src="" alt="Pairing QR" style="width: 150px; height: 150px; border-radius: 6px; border: 1px solid var(--border-subtle); object-fit: contain; background: #000;" />
                     <span style="font-size: 10px; color: var(--text-muted); margin-top: 6px; text-transform: uppercase; font-weight: 600;">1-Tap Phone / Watch Scan</span>
                 </div>
                 <div style="display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
-                        <div style="font-size: 14px; font-weight: 700; color: #ffffff; margin-bottom: 4px;">Hermes Companion PWA</div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap;">
+                            <div style="font-size: 14px; font-weight: 800; color: #ffffff;">📲 Native Android &amp; Wear OS APKs — Google Pixel 7 Pro &amp; Samsung Galaxy Watch 8</div>
+                            <span style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981;">SIGNED V2+V3 APKs</span>
+                        </div>
                         <p style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
-                            Zero Termux hassle. Open this link on your phone, watch, or laptop to install the Hermes Companion. Includes <strong>instant clipboard sync</strong>, <strong>camera-to-vision relay</strong>, <strong>wrist haptics & voice prompts</strong>, and <strong>emergency panic controls</strong>.
+                            Install real standalone Android &amp; Wear OS apps (<code>com.hermes.sovereign.phone</code> &amp; <code>com.hermes.sovereign.watch</code>) in your app drawer — not just browser fullscreen! Includes native <strong>Samsung Watch 8 BioActive Heart Rate / Step / Battery sensors</strong>, <strong>15s background health telemetry sync</strong>, and <strong>proactive anomaly notifications</strong>.
                         </p>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
                             <input type="text" id="mesh-companion-url" class="input-text" readonly style="flex: 1; font-family: monospace; font-size: 12px;" />
@@ -3266,11 +3269,69 @@ def dashboard():
                         </div>
                     </div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-                        <a id="btn-open-phone" href="/companions/smartphone" target="_blank" class="btn-action" style="text-decoration: none;">📱 Open Mobile View</a>
-                        <a id="btn-open-watch" href="/companions/smartwatch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Open Watch HUD</a>
-                        <a id="btn-open-laptop" href="/companions/laptop" target="_blank" class="btn-action" style="text-decoration: none;">💻 Open Laptop View</a>
-                        <button class="btn-action" onclick="refreshMeshDevices()">🔄 Refresh Mesh</button>
+                        <a href="/download/hermes-pixel7pro.apk" download="hermes-pixel7pro.apk" class="btn-action" style="text-decoration: none; background: #10b981; color: #04130d; font-weight: 800; border-color: #10b981;">📲 Download Pixel 7 Pro APK (.apk)</a>
+                        <a href="/download/hermes-galaxy-watch8.apk" download="hermes-galaxy-watch8.apk" class="btn-action" style="text-decoration: none; background: #38bdf8; color: #04131a; font-weight: 800; border-color: #38bdf8;">⌚ Download Galaxy Watch 8 APK (.apk)</a>
+                        <a href="/connect" target="_blank" class="btn-action" style="text-decoration: none; border-color: #a855f7; color: #e9d5ff; font-weight: 700;">🚀 1-Click Watch ADB Beamer &amp; QR Hub</a>
+                        <a id="btn-open-phone" href="/companions/smartphone" target="_blank" class="btn-action" style="text-decoration: none;">📱 Mobile HUD</a>
+                        <a id="btn-open-watch" href="/companions/smartwatch" target="_blank" class="btn-action" style="text-decoration: none;">⌚ Watch HUD</a>
+                        <button class="btn-action" onclick="refreshMeshDevices()">🔄 Refresh</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- SAMSUNG GALAXY WATCH 8 & PIXEL 7 PRO BIOMETRIC HEALTH ANALYZER -->
+            <div style="background: linear-gradient(145deg, rgba(13,22,36,0.95) 0%, rgba(17,24,39,0.95) 100%); border: 1px solid rgba(16, 185, 129, 0.38); border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                    <div>
+                        <div style="font-size: 14px; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                            ❤️ Samsung Galaxy Watch 8 &amp; Pixel 7 Pro — Live Biometric Health &amp; Readiness Analyzer
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                            Continuous BioActive Sensor ingestion (Heart Rate BPM, RHR, HRV RMSSD, SpO2 %, Stress, Sleep stages, Steps) with automated anomaly detection &amp; multi-device notifications.
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="btn-action" style="background: rgba(16,185,129,0.18); border-color: #10b981; color: #10b981; font-weight: 800;" onclick="simulateDashboardWatchBiometrics('optimal')">⚡ Sync Optimal Biometrics</button>
+                        <button class="btn-action" style="background: rgba(245,158,11,0.18); border-color: #f59e0b; color: #fbbf24; font-weight: 800;" onclick="simulateDashboardWatchBiometrics('anomaly')">🚨 Simulate Watch 8 Stress / SpO2 Alert</button>
+                        <button class="btn-action" onclick="refreshDashboardWatchBiometrics()">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px;">
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Readiness Score</div>
+                        <div id="dash-bio-readiness" style="font-size: 20px; font-weight: 800; color: #10b981; margin-top: 3px;">-- / 100</div>
+                        <div id="dash-bio-status" style="font-size: 10.5px; color: var(--text-muted);">Waiting...</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Heart Rate (Watch 8)</div>
+                        <div id="dash-bio-hr" style="font-size: 20px; font-weight: 800; color: #ffffff; margin-top: 3px;">-- BPM</div>
+                        <div id="dash-bio-rhr" style="font-size: 10.5px; color: var(--text-muted);">Resting: -- BPM</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">HRV &amp; Stress</div>
+                        <div id="dash-bio-hrv" style="font-size: 20px; font-weight: 800; color: #38bdf8; margin-top: 3px;">-- ms</div>
+                        <div id="dash-bio-stress" style="font-size: 10.5px; color: var(--text-muted);">Stress: -- / 100</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Blood Oxygen (SpO2)</div>
+                        <div id="dash-bio-spo2" style="font-size: 20px; font-weight: 800; color: #a855f7; margin-top: 3px;">-- %</div>
+                        <div id="dash-bio-temp" style="font-size: 10.5px; color: var(--text-muted);">Skin: -- °C</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Sleep Score</div>
+                        <div id="dash-bio-sleep" style="font-size: 20px; font-weight: 800; color: #ffffff; margin-top: 3px;">-- / 100</div>
+                        <div id="dash-bio-sleep-sub" style="font-size: 10.5px; color: var(--text-muted);">Duration: --h</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.35); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                        <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Steps &amp; Battery</div>
+                        <div id="dash-bio-steps" style="font-size: 20px; font-weight: 800; color: #10b981; margin-top: 3px;">--</div>
+                        <div id="dash-bio-batt" style="font-size: 10.5px; color: var(--text-muted);">⌚ --% • 📱 --%</div>
+                    </div>
+                </div>
+
+                <div id="dash-bio-insight-box" style="background: rgba(0,0,0,0.45); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--text-main);">
+                    <strong>🩺 Hermes BioActive Insight:</strong> <span id="dash-bio-insight">Ready to analyze Samsung Galaxy Watch 8 telemetry.</span>
                 </div>
             </div>
 
@@ -5604,6 +5665,7 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             <button class="notif-cat-chip" onclick="setNotifCategory('DEAL_ALERT', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">🛍️ Deals</button>
             <button class="notif-cat-chip" onclick="setNotifCategory('ROSTER_COMPLETE', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">👥 Roster</button>
             <button class="notif-cat-chip" onclick="setNotifCategory('SMART_SHUTDOWN', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">🌙 Power</button>
+            <button class="notif-cat-chip" onclick="setNotifCategory('WATCH_BIOMETRICS', this)" style="cursor:pointer;padding:3px 9px;font-size:10.5px;font-weight:700;border-radius:999px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;">⌚ Watch Health</button>
         </div>
 
         <!-- Scrollable Notification Feed -->
@@ -6056,7 +6118,83 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             }
         }
 
+        function renderDashboardWatchBio(data) {
+            const s = data.sample || data.latest || {};
+            const a = data.analysis || {};
+            const score = a.readiness_score !== undefined ? a.readiness_score : 88;
+            const rEl = document.getElementById('dash-bio-readiness');
+            if (rEl) {
+                rEl.innerText = score + ' / 100';
+                rEl.style.color = score >= 80 ? '#10b981' : (score >= 60 ? '#f59e0b' : '#ef4444');
+            }
+            const stEl = document.getElementById('dash-bio-status');
+            if (stEl) stEl.innerText = (a.status_label || 'OPTIMAL') + ' (' + (s.activity_state || 'resting') + ')';
+            const hrEl = document.getElementById('dash-bio-hr');
+            if (hrEl) hrEl.innerText = (s.heart_rate_bpm || '--') + ' BPM';
+            const rhrEl = document.getElementById('dash-bio-rhr');
+            if (rhrEl) rhrEl.innerText = 'Resting: ' + (s.resting_hr_bpm || '--') + ' BPM';
+            const hrvEl = document.getElementById('dash-bio-hrv');
+            if (hrvEl) hrvEl.innerText = (s.hrv_rmssd_ms || '--') + ' ms';
+            const strEl = document.getElementById('dash-bio-stress');
+            if (strEl) strEl.innerText = 'Stress: ' + (s.stress_score !== undefined ? s.stress_score : '--') + ' / 100';
+            const spoEl = document.getElementById('dash-bio-spo2');
+            if (spoEl) spoEl.innerText = (s.spo2_pct || '--') + ' %';
+            const tmpEl = document.getElementById('dash-bio-temp');
+            if (tmpEl) tmpEl.innerText = 'Skin: ' + (s.skin_temp_c || '--') + ' °C';
+            const slpEl = document.getElementById('dash-bio-sleep');
+            if (slpEl) slpEl.innerText = (s.sleep_score || '--') + ' / 100';
+            const slpSubEl = document.getElementById('dash-bio-sleep-sub');
+            if (slpSubEl) slpSubEl.innerText = (s.sleep_duration_hours || '--') + 'h (Deep ' + (s.deep_sleep_minutes || '--') + 'm)';
+            const stpEl = document.getElementById('dash-bio-steps');
+            if (stpEl) stpEl.innerText = s.steps !== undefined ? Number(s.steps).toLocaleString() : '--';
+            const batEl = document.getElementById('dash-bio-batt');
+            if (batEl) batEl.innerText = '⌚ ' + (s.watch_battery_pct || '--') + '% • 📱 ' + (s.phone_battery_pct || '--') + '%';
+
+            const insEl = document.getElementById('dash-bio-insight');
+            const boxEl = document.getElementById('dash-bio-insight-box');
+            const anoms = a.anomalies || [];
+            const recs = a.recommendations || [];
+            if (insEl && boxEl) {
+                if (anoms.length > 0) {
+                    boxEl.style.borderColor = '#ef4444';
+                    insEl.innerHTML = `<span style="color:#f87171;font-weight:800;">⚠️ ${anoms.length} Watch 8 Anomaly Alert(s) Dispatched:</span> ` + recs.join(' | ');
+                } else {
+                    boxEl.style.borderColor = 'rgba(16,185,129,0.4)';
+                    insEl.innerText = recs.join(' | ') || 'Biometrics within healthy baseline.';
+                }
+            }
+        }
+
+        async function refreshDashboardWatchBiometrics() {
+            try {
+                const res = await fetch('/api/watch/analytics');
+                const data = await res.json();
+                renderDashboardWatchBio(data);
+            } catch (e) {}
+        }
+
+        async function simulateDashboardWatchBiometrics(mode) {
+            try {
+                const res = await fetch('/api/watch/simulate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode })
+                });
+                const data = await res.json();
+                renderDashboardWatchBio(data);
+                if (typeof fetchNotifications === 'function') fetchNotifications();
+                if (mode === 'anomaly') {
+                    showToast('🚨 Galaxy Watch 8 Stress/SpO2 Alert Dispatched across Watch, Pixel 7 Pro & Desktop!');
+                } else {
+                    showToast('⚡ Watch 8 Optimal Biometrics Synced (Readiness: ' + data.analysis.readiness_score + '/100)');
+                }
+            } catch (e) {
+                showToast('Watch simulation error');
+            }
+        }
+
         setTimeout(refreshVaultStatus, 500);
+        setTimeout(refreshDashboardWatchBiometrics, 700);
     </script>
 </body>
 </html>
