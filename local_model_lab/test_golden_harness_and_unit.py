@@ -472,6 +472,62 @@ class TestHermesGoldenHarnessAndGuardrails(unittest.TestCase):
         self.assertEqual(len(ROLE_PERSONAS), 10)
         self.assertEqual(ROLE_PERSONAS["OPERATOR"]["persona_name"], "Jev")
 
+    def test_12_pin_secured_api_vault_encryption_lockout_and_rotation(self):
+        """Verifies SovereignAPIVault PBKDF2-HMAC-SHA256 + Fernet encryption, PIN setup, lock/unlock, brute-force lockout, and PIN rotation."""
+        import tempfile
+        from pathlib import Path
+        from api_vault import SovereignAPIVault, mask_secret_preview
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            vault_file = Path(tmpdir) / "test_vault.enc.json"
+            vault = SovereignAPIVault(vault_path=vault_file, sync_dotenv=False)
+            self.assertFalse(vault.is_initialized())
+
+            # 1. Setup PIN
+            setup_res = vault.setup_pin("7302", import_existing_env=False)
+            self.assertEqual(setup_res["status"], "ok")
+            token = setup_res["session_token"]
+            self.assertTrue(vault.is_initialized())
+            self.assertTrue(vault.is_unlocked(token))
+
+            # 2. Store a secret and verify ciphertext on disk NEVER contains raw secret
+            raw_secret = "gsk_SuperSecretTestKey9876543210ABCDEF"
+            set_res = vault.set_secret("GROQ_API_KEY", raw_secret, session_token=token)
+            self.assertEqual(set_res["status"], "ok")
+            disk_text = vault_file.read_text(encoding="utf-8")
+            self.assertNotIn(raw_secret, disk_text)
+            self.assertEqual(mask_secret_preview(raw_secret), "gsk_••••••••••••CDEF")
+
+            # 3. Reveal secret while unlocked
+            rev_res = vault.reveal_secret("GROQ_API_KEY", session_token=token)
+            self.assertEqual(rev_res["status"], "ok")
+            self.assertEqual(rev_res["value"], raw_secret)
+
+            # 4. Lock vault -> reveal must fail without valid PIN
+            vault.lock()
+            self.assertFalse(vault.is_unlocked(token))
+            denied_res = vault.reveal_secret("GROQ_API_KEY", session_token=token)
+            self.assertEqual(denied_res["status"], "error")
+
+            # 5. Wrong PIN attempts increment counter
+            bad_res = vault.unlock("0000")
+            self.assertEqual(bad_res["status"], "error")
+            self.assertEqual(bad_res["failed_attempts"], 1)
+
+            # 6. Correct PIN unlocks and resets failed_attempts
+            ok_unlock = vault.unlock("7302")
+            self.assertEqual(ok_unlock["status"], "ok")
+            new_tok = ok_unlock["session_token"]
+
+            # 7. Rotate PIN from 7302 -> 998822
+            rot_res = vault.change_pin("7302", "998822")
+            self.assertEqual(rot_res["status"], "ok")
+            vault.lock()
+            self.assertEqual(vault.unlock("7302")["status"], "error")
+            self.assertEqual(vault.unlock("998822")["status"], "ok")
+            rev_after = vault.reveal_secret("GROQ_API_KEY", pin="998822")
+            self.assertEqual(rev_after["value"], raw_secret)
+
 
 
 

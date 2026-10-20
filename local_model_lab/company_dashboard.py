@@ -1445,6 +1445,111 @@ async def api_mesh_clipboard_get():
 
 
 # ==============================================================================
+# SOVEREIGN PIN-PROTECTED API VAULT ENDPOINTS
+# ==============================================================================
+try:
+    from local_model_lab.api_vault import get_api_vault
+except ImportError:
+    from api_vault import get_api_vault
+
+
+def _extract_vault_token(request: Request, body: Optional[ dict ] = None) -> Optional[str]:
+    hdr = request.headers.get("X-Vault-Token") or request.query_params.get("session_token")
+    if hdr:
+        return hdr
+    if isinstance(body, dict):
+        return body.get("session_token")
+    return None
+
+
+@app.get("/api/vault/status")
+async def api_vault_status(request: Request):
+    tok = _extract_vault_token(request)
+    return JSONResponse(content=get_api_vault().get_status(session_token=tok))
+
+
+@app.post("/api/vault/setup_pin")
+async def api_vault_setup_pin(request: Request):
+    data = await request.json()
+    pin = str(data.get("pin", ""))
+    import_env = bool(data.get("import_existing_env", True))
+    res = get_api_vault().setup_pin(pin=pin, import_existing_env=import_env)
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 400)
+
+
+@app.post("/api/vault/unlock")
+async def api_vault_unlock(request: Request):
+    data = await request.json()
+    pin = str(data.get("pin", ""))
+    res = get_api_vault().unlock(pin=pin)
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 403)
+
+
+@app.post("/api/vault/lock")
+async def api_vault_lock():
+    return JSONResponse(content=get_api_vault().lock())
+
+
+@app.post("/api/vault/change_pin")
+async def api_vault_change_pin(request: Request):
+    data = await request.json()
+    current_pin = str(data.get("current_pin", ""))
+    new_pin = str(data.get("new_pin", ""))
+    res = get_api_vault().change_pin(current_pin=current_pin, new_pin=new_pin)
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 403)
+
+
+@app.post("/api/vault/set_secret")
+async def api_vault_set_secret(request: Request):
+    data = await request.json()
+    tok = _extract_vault_token(request, data)
+    res = get_api_vault().set_secret(
+        key_name=str(data.get("key_name", "")),
+        key_value=str(data.get("key_value", "")),
+        provider=data.get("provider"),
+        pin=data.get("pin"),
+        session_token=tok,
+    )
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 403)
+
+
+@app.post("/api/vault/delete_secret")
+async def api_vault_delete_secret(request: Request):
+    data = await request.json()
+    tok = _extract_vault_token(request, data)
+    res = get_api_vault().delete_secret(
+        key_name=str(data.get("key_name", "")),
+        pin=data.get("pin"),
+        session_token=tok,
+    )
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 403)
+
+
+@app.post("/api/vault/reveal_secret")
+async def api_vault_reveal_secret(request: Request):
+    data = await request.json()
+    tok = _extract_vault_token(request, data)
+    res = get_api_vault().reveal_secret(
+        key_name=str(data.get("key_name", "")),
+        pin=data.get("pin"),
+        session_token=tok,
+    )
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 403)
+
+
+@app.post("/api/vault/test_secret")
+async def api_vault_test_secret(request: Request):
+    data = await request.json()
+    tok = _extract_vault_token(request, data)
+    res = get_api_vault().test_secret_live(
+        key_name=str(data.get("key_name", "")),
+        pin=data.get("pin"),
+        session_token=tok,
+    )
+    return JSONResponse(content=res, status_code=200 if res.get("status") == "ok" else 400)
+
+
+# ==============================================================================
 # MAIN DASHBOARD UI
 # ==============================================================================
 
@@ -2311,6 +2416,14 @@ def dashboard():
                 <span class="stat-val" id="top-stat-notif-badge" style="color: #38bdf8;">0 Unread</span>
             </div>
         </div>
+
+        <div class="stat-widget" style="cursor: pointer; border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.08);" onclick="toggleVaultModal(true)" title="Open PIN-Secured API Credential Vault">
+            <div class="stat-icon" id="top-stat-vault-icon">🔐</div>
+            <div class="stat-meta">
+                <span class="stat-label">API Vault (PIN)</span>
+                <span class="stat-val" id="top-stat-vault-badge" style="color: #fbbf24;">SETUP PIN</span>
+            </div>
+        </div>
     </div>
 
     <!-- TABS NAVIGATION HEADER -->
@@ -2334,6 +2447,7 @@ def dashboard():
             <button class="tab-btn" onclick="setTab('browser')">🌐 Browser Extension</button>
             <button class="tab-btn" onclick="setTab('logs')">📜 Audit Trail</button>
             <button class="tab-btn" style="border-color: rgba(56, 189, 248, 0.5); color: #38bdf8;" onclick="toggleNotificationDrawer()">🔔 Alerts <span id="nav-notif-pill" style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px;display:none;">0</span></button>
+            <button class="tab-btn" style="border-color: rgba(251, 191, 36, 0.55); color: #fbbf24; font-weight: 800;" onclick="toggleVaultModal(true)">🔐 API Vault <span id="nav-vault-pill" style="background:rgba(251,191,36,0.2);color:#fbbf24;font-size:9px;padding:1px 6px;border-radius:999px;margin-left:4px;">PIN</span></button>
         </div>
     </div>
 
@@ -5495,6 +5609,455 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         <!-- Scrollable Notification Feed -->
         <div id="notif-list-container" style="flex:1;overflow-y:auto;padding:12px 16px;"></div>
     </div>
+
+    <!-- SOVEREIGN PIN-PROTECTED API CREDENTIAL VAULT MODAL -->
+    <div id="vault-modal-overlay" onclick="toggleVaultModal(false)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.68);backdrop-filter:blur(5px);z-index:10000;"></div>
+    <div id="vault-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:680px;max-width:95vw;max-height:88vh;background:#071210;border:1px solid rgba(251,191,36,0.45);border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,0.85);z-index:10001;flex-direction:column;overflow:hidden;">
+        <!-- Vault Modal Header -->
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.08);background:linear-gradient(135deg, rgba(15,29,24,0.95), rgba(8,18,15,0.95));display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:15px;font-weight:800;color:#fbbf24;display:flex;align-items:center;gap:8px;">
+                    🔐 Sovereign PIN-Protected API Vault
+                    <span id="vault-modal-state-pill" style="font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(251,191,36,0.18);border:1px solid #fbbf24;color:#fbbf24;">CHECKING...</span>
+                </div>
+                <div id="vault-modal-subtitle" style="font-size:11px;color:#94a3b8;font-family:monospace;margin-top:3px;">
+                    PBKDF2-HMAC-SHA256 (310,000 iter) • AES-128-CBC + HMAC-SHA256 • ~/.hermes/api_vault.enc.json
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="vault-lock-now-btn" onclick="lockVaultSession()" style="display:none;cursor:pointer;background:rgba(239,68,68,0.18);border:1px solid #ef4444;color:#fca5a5;border-radius:6px;padding:5px 11px;font-size:11px;font-weight:800;">🔒 Lock Vault</button>
+                <button onclick="toggleVaultModal(false)" style="cursor:pointer;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);color:#cbd5e1;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;">✕ Close</button>
+            </div>
+        </div>
+
+        <!-- Scrollable Vault Body -->
+        <div style="padding:18px 20px;overflow-y:auto;flex:1;">
+            <!-- Feedback Banner -->
+            <div id="vault-feedback-box" style="display:none;margin-bottom:14px;padding:10px 12px;border-radius:7px;font-size:12px;font-weight:700;"></div>
+
+            <!-- SCREEN 1: FIRST-TIME PIN SETUP -->
+            <div id="vault-screen-setup" style="display:none;background:rgba(15,23,42,0.65);border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:18px;">
+                <div style="font-size:14px;font-weight:800;color:#f8fafc;margin-bottom:6px;">🛡️ Step 1: Set Up Your Master Vault PIN</div>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">
+                    Create a 4–16 digit/character PIN. Hermes will immediately derive a 256-bit key using <code>PBKDF2-HMAC-SHA256 (310,000 iterations)</code>, import and encrypt your existing API keys (Gemini, Groq, Ollama Cloud, NVIDIA NIM, OpenRouter, etc.) into <code>~/.hermes/api_vault.enc.json</code>, and protect them behind your PIN.
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label style="display:block;font-size:11px;color:#cbd5e1;font-weight:700;margin-bottom:4px;">Create Vault PIN (4–16 digits/chars)</label>
+                        <input type="password" id="vault-setup-pin1" class="form-input" style="width:100%;font-size:15px;letter-spacing:0.2em;text-align:center;" placeholder="••••••" onkeydown="if(event.key==='Enter') setupVaultPin()" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:11px;color:#cbd5e1;font-weight:700;margin-bottom:4px;">Confirm Vault PIN</label>
+                        <input type="password" id="vault-setup-pin2" class="form-input" style="width:100%;font-size:15px;letter-spacing:0.2em;text-align:center;" placeholder="••••••" onkeydown="if(event.key==='Enter') setupVaultPin()" />
+                    </div>
+                </div>
+                <button onclick="setupVaultPin()" style="cursor:pointer;width:100%;padding:10px 16px;font-size:13px;font-weight:800;border-radius:7px;background:#fbbf24;color:#05130d;border:none;">
+                    🔐 Initialize PIN &amp; Encrypt Existing API Keys
+                </button>
+            </div>
+
+            <!-- SCREEN 2: LOCKED VAULT (ENTER PIN TO UNLOCK) -->
+            <div id="vault-screen-locked" style="display:none;background:rgba(15,23,42,0.65);border:1px solid rgba(56,189,248,0.35);border-radius:10px;padding:18px;">
+                <div style="font-size:14px;font-weight:800;color:#f8fafc;margin-bottom:6px;">🔒 Vault is Locked — Enter PIN to Unlock</div>
+                <div id="vault-locked-desc" style="font-size:12px;color:#94a3b8;margin-bottom:14px;">
+                    Your API credentials are encrypted at rest. Enter your PIN to view, test, add, or rotate keys.
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+                    <input type="password" id="vault-unlock-pin" class="form-input" style="flex:1;font-size:16px;letter-spacing:0.25em;text-align:center;" placeholder="Enter PIN ••••••" onkeydown="if(event.key==='Enter') unlockVaultWithPin()" />
+                    <button onclick="unlockVaultWithPin()" style="cursor:pointer;padding:10px 20px;font-size:13px;font-weight:800;border-radius:7px;background:#10b981;color:#05130d;border:none;">
+                        🔓 Unlock Vault
+                    </button>
+                </div>
+                <!-- Quick On-Screen Keypad -->
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
+                    <button onclick="appendPinDigit('1')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">1</button>
+                    <button onclick="appendPinDigit('2')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">2</button>
+                    <button onclick="appendPinDigit('3')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">3</button>
+                    <button onclick="appendPinDigit('4')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">4</button>
+                    <button onclick="appendPinDigit('5')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">5</button>
+                    <button onclick="appendPinDigit('6')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">6</button>
+                    <button onclick="appendPinDigit('7')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">7</button>
+                    <button onclick="appendPinDigit('8')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">8</button>
+                    <button onclick="appendPinDigit('9')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">9</button>
+                    <button onclick="appendPinDigit('0')" class="btn-action" style="min-width:44px;padding:6px 10px;font-weight:800;">0</button>
+                    <button onclick="clearPinDigits()" class="btn-action" style="padding:6px 10px;color:#f87171;">⌫ Clear</button>
+                </div>
+            </div>
+
+            <!-- SCREEN 3: UNLOCKED VAULT MANAGER -->
+            <div id="vault-screen-unlocked" style="display:none;">
+                <!-- Add / Rotate Key Card -->
+                <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.3);border-radius:9px;padding:14px;margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <div style="font-size:12.5px;font-weight:800;color:#10b981;">➕ Add or Rotate Encrypted API Key</div>
+                        <button onclick="toggleChangePinBox()" style="cursor:pointer;background:rgba(251,191,36,0.14);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:5px;padding:3px 9px;font-size:10.5px;font-weight:700;">🔑 Change Vault PIN</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:220px 1fr auto;gap:8px;align-items:center;">
+                        <select id="vault-key-preset" class="form-input" onchange="onVaultPresetChange()" style="font-weight:700;color:#38bdf8;">
+                            <option value="GEMINI_API_KEY">✨ GEMINI_API_KEY (Google)</option>
+                            <option value="GROQ_API_KEY">⚡ GROQ_API_KEY (Groq LPU)</option>
+                            <option value="OLLAMA_API_KEY">🦙 OLLAMA_API_KEY (Ollama Cloud)</option>
+                            <option value="NVIDIA_API_KEY">🟢 NVIDIA_API_KEY (NVIDIA NIM)</option>
+                            <option value="OPENROUTER_API_KEY">🌐 OPENROUTER_API_KEY</option>
+                            <option value="OPENAI_API_KEY">🧠 OPENAI_API_KEY</option>
+                            <option value="ANTHROPIC_API_KEY">🏛️ ANTHROPIC_API_KEY</option>
+                            <option value="TELEGRAM_BOT_TOKEN">✈️ TELEGRAM_BOT_TOKEN</option>
+                            <option value="GITHUB_TOKEN">🐙 GITHUB_TOKEN</option>
+                            <option value="EXA_API_KEY">🔎 EXA_API_KEY</option>
+                            <option value="TAVILY_API_KEY">🧭 TAVILY_API_KEY</option>
+                            <option value="FAL_KEY">🎨 FAL_KEY</option>
+                            <option value="CUSTOM">🔑 Custom Key Name...</option>
+                        </select>
+                        <input type="password" id="vault-key-value" class="form-input" placeholder="Paste API key or token to encrypt..." onkeydown="if(event.key==='Enter') saveVaultSecret()" />
+                        <button onclick="saveVaultSecret()" style="cursor:pointer;padding:8px 14px;font-size:12px;font-weight:800;border-radius:6px;background:#10b981;color:#05130d;border:none;">
+                            💾 Encrypt &amp; Save
+                        </button>
+                    </div>
+                    <div id="vault-custom-key-row" style="display:none;margin-top:8px;">
+                        <input type="text" id="vault-custom-key-name" class="form-input" style="width:100%;" placeholder="Enter custom environment key name (e.g. DEEPGRAM_API_KEY)" />
+                    </div>
+
+                    <!-- Collapsible Change PIN Box -->
+                    <div id="vault-change-pin-box" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size:11.5px;font-weight:800;color:#fbbf24;margin-bottom:6px;">🔑 Rotate Master Vault PIN (Re-Salts &amp; Re-Encrypts All Keys)</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;">
+                            <input type="password" id="vault-old-pin" class="form-input" placeholder="Current PIN" />
+                            <input type="password" id="vault-new-pin" class="form-input" placeholder="New PIN (4–16 chars)" />
+                            <button onclick="changeVaultPin()" style="cursor:pointer;padding:8px 12px;font-size:11.5px;font-weight:800;border-radius:6px;background:#fbbf24;color:#05130d;border:none;">Update PIN</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stored Encrypted Keys List -->
+                <div style="font-size:12px;font-weight:800;color:#cbd5e1;margin-bottom:8px;display:flex;justify-content:space-between;">
+                    <span>🔐 Encrypted Credentials in Vault (<span id="vault-keys-count-label">0</span>)</span>
+                    <span id="vault-ttl-label" style="color:#38bdf8;font-family:monospace;font-size:11px;"></span>
+                </div>
+                <div id="vault-keys-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let vaultSessionToken = sessionStorage.getItem('hermes_vault_token') || '';
+        let vaultModalOpen = false;
+        let vaultRevealedMap = {};
+
+        function showVaultFeedback(msg, isError) {
+            const box = document.getElementById('vault-feedback-box');
+            if (!box) return;
+            box.style.display = 'block';
+            box.style.background = isError ? 'rgba(239,68,68,0.18)' : 'rgba(16,185,129,0.18)';
+            box.style.border = '1px solid ' + (isError ? '#ef4444' : '#10b981');
+            box.style.color = isError ? '#fca5a5' : '#6ee7b7';
+            box.innerText = msg;
+            setTimeout(() => { box.style.display = 'none'; }, 5000);
+        }
+
+        function toggleVaultModal(forceState) {
+            const modal = document.getElementById('vault-modal');
+            const overlay = document.getElementById('vault-modal-overlay');
+            if (!modal || !overlay) return;
+            vaultModalOpen = typeof forceState === 'boolean' ? forceState : !vaultModalOpen;
+            modal.style.display = vaultModalOpen ? 'flex' : 'none';
+            overlay.style.display = vaultModalOpen ? 'block' : 'none';
+            if (vaultModalOpen) {
+                refreshVaultStatus();
+            }
+        }
+
+        function appendPinDigit(d) {
+            const inp = document.getElementById('vault-unlock-pin');
+            if (inp) { inp.value += d; inp.focus(); }
+        }
+
+        function clearPinDigits() {
+            const inp = document.getElementById('vault-unlock-pin');
+            if (inp) { inp.value = ''; inp.focus(); }
+        }
+
+        function onVaultPresetChange() {
+            const sel = document.getElementById('vault-key-preset');
+            const row = document.getElementById('vault-custom-key-row');
+            if (sel && row) {
+                row.style.display = sel.value === 'CUSTOM' ? 'block' : 'none';
+            }
+        }
+
+        function toggleChangePinBox() {
+            const b = document.getElementById('vault-change-pin-box');
+            if (b) b.style.display = b.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function refreshVaultStatus() {
+            try {
+                const res = await fetch('/api/vault/status', {
+                    headers: vaultSessionToken ? { 'X-Vault-Token': vaultSessionToken } : {}
+                });
+                const data = await res.json();
+                const topBadge = document.getElementById('top-stat-vault-badge');
+                const topIcon = document.getElementById('top-stat-vault-icon');
+                const navPill = document.getElementById('nav-vault-pill');
+                const modalPill = document.getElementById('vault-modal-state-pill');
+                const lockBtn = document.getElementById('vault-lock-now-btn');
+
+                const sSetup = document.getElementById('vault-screen-setup');
+                const sLocked = document.getElementById('vault-screen-locked');
+                const sUnlocked = document.getElementById('vault-screen-unlocked');
+
+                if (!data.initialized) {
+                    if (topBadge) { topBadge.innerText = 'SETUP PIN'; topBadge.style.color = '#fbbf24'; }
+                    if (topIcon) topIcon.innerText = '🛡️';
+                    if (navPill) { navPill.innerText = 'SETUP'; navPill.style.color = '#fbbf24'; }
+                    if (modalPill) { modalPill.innerText = 'SETUP REQUIRED'; modalPill.style.color = '#fbbf24'; modalPill.style.borderColor = '#fbbf24'; }
+                    if (lockBtn) lockBtn.style.display = 'none';
+                    if (sSetup) sSetup.style.display = 'block';
+                    if (sLocked) sLocked.style.display = 'none';
+                    if (sUnlocked) sUnlocked.style.display = 'none';
+                } else if (!data.unlocked) {
+                    if (topBadge) { topBadge.innerText = `LOCKED (${data.keys_count || 0})`; topBadge.style.color = '#38bdf8'; }
+                    if (topIcon) topIcon.innerText = '🔒';
+                    if (navPill) { navPill.innerText = 'LOCKED'; navPill.style.color = '#38bdf8'; }
+                    if (modalPill) { modalPill.innerText = 'LOCKED 🔒'; modalPill.style.color = '#38bdf8'; modalPill.style.borderColor = '#38bdf8'; }
+                    if (lockBtn) lockBtn.style.display = 'none';
+                    if (sSetup) sSetup.style.display = 'none';
+                    if (sLocked) sLocked.style.display = 'block';
+                    if (sUnlocked) sUnlocked.style.display = 'none';
+                    const desc = document.getElementById('vault-locked-desc');
+                    if (desc) {
+                        desc.innerText = data.lockout_remaining_s > 0
+                            ? `🚨 Brute-force cooldown active: wait ${data.lockout_remaining_s}s before retrying.`
+                            : `${data.keys_count || 0} API keys encrypted at rest with PBKDF2-HMAC-SHA256 + AES-128-CBC. Enter your PIN to unlock.`;
+                    }
+                } else {
+                    if (topBadge) { topBadge.innerText = `UNLOCKED (${data.keys_count || 0})`; topBadge.style.color = '#10b981'; }
+                    if (topIcon) topIcon.innerText = '🔓';
+                    if (navPill) { navPill.innerText = 'OPEN'; navPill.style.color = '#10b981'; }
+                    if (modalPill) { modalPill.innerText = 'UNLOCKED 🔓'; modalPill.style.color = '#10b981'; modalPill.style.borderColor = '#10b981'; }
+                    if (lockBtn) lockBtn.style.display = 'inline-block';
+                    if (sSetup) sSetup.style.display = 'none';
+                    if (sLocked) sLocked.style.display = 'none';
+                    if (sUnlocked) sUnlocked.style.display = 'block';
+                    const cntLbl = document.getElementById('vault-keys-count-label');
+                    if (cntLbl) cntLbl.innerText = String(data.keys_count || 0);
+                    const ttlLbl = document.getElementById('vault-ttl-label');
+                    if (ttlLbl) ttlLbl.innerText = `Auto-lock in ${Math.ceil((data.session_ttl_remaining_s || 0) / 60)}m`;
+                    renderVaultKeysList(data.keys || []);
+                }
+            } catch (e) {}
+        }
+
+        function renderVaultKeysList(keys) {
+            const container = document.getElementById('vault-keys-list');
+            if (!container) return;
+            if (!keys.length) {
+                container.innerHTML = `<div style="padding:18px;text-align:center;color:#64748b;">No keys stored yet. Add one above!</div>`;
+                return;
+            }
+            container.innerHTML = keys.map(k => {
+                const revealedVal = vaultRevealedMap[k.key];
+                const displayVal = revealedVal ? revealedVal : k.masked_value;
+                return `
+                    <div style="padding:10px 12px;border-radius:8px;background:rgba(15,23,42,0.82);border:1px solid rgba(255,255,255,0.09);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <div style="min-width:210px;">
+                            <div style="font-size:12px;font-weight:800;color:#f8fafc;">${k.icon || '🔑'} <code>${k.key}</code></div>
+                            <div style="font-size:10.5px;color:#94a3b8;">${k.provider || 'API Key'}</div>
+                        </div>
+                        <div style="font-family:monospace;font-size:11.5px;color:${revealedVal ? '#fbbf24' : '#38bdf8'};background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:5px;border:1px solid rgba(255,255,255,0.07);word-break:break-all;max-width:240px;">
+                            ${displayVal}
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <span id="vault-test-badge-${k.key}" style="font-size:10px;font-family:monospace;color:#10b981;"></span>
+                            <button onclick="revealVaultSecret('${k.key}')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;">${revealedVal ? '🙈 Hide' : '👁️ Reveal'}</button>
+                            <button onclick="testVaultSecret('${k.key}')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;background:rgba(56,189,248,0.16);border:1px solid #38bdf8;color:#38bdf8;">⚡ Test</button>
+                            <button onclick="deleteVaultSecret('${k.key}')" style="cursor:pointer;padding:4px 8px;font-size:10.5px;font-weight:700;border-radius:5px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function setupVaultPin() {
+            const p1 = (document.getElementById('vault-setup-pin1')?.value || '').trim();
+            const p2 = (document.getElementById('vault-setup-pin2')?.value || '').trim();
+            if (p1.length < 4) {
+                showVaultFeedback('PIN must be at least 4 characters/digits.', true);
+                return;
+            }
+            if (p1 !== p2) {
+                showVaultFeedback('PIN confirmation does not match.', true);
+                return;
+            }
+            const res = await fetch('/api/vault/setup_pin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ pin: p1, import_existing_env: true })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                vaultSessionToken = data.session_token || '';
+                sessionStorage.setItem('hermes_vault_token', vaultSessionToken);
+                showVaultFeedback(data.message || 'Vault initialized!', false);
+                showToast('🔐 Vault PIN set & keys encrypted!');
+                refreshVaultStatus();
+            } else {
+                showVaultFeedback(data.error || 'Failed to set up PIN.', true);
+            }
+        }
+
+        async function unlockVaultWithPin() {
+            const pin = (document.getElementById('vault-unlock-pin')?.value || '').trim();
+            if (!pin) {
+                showVaultFeedback('Please enter your PIN.', true);
+                return;
+            }
+            const res = await fetch('/api/vault/unlock', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ pin })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                vaultSessionToken = data.session_token || '';
+                sessionStorage.setItem('hermes_vault_token', vaultSessionToken);
+                const inp = document.getElementById('vault-unlock-pin');
+                if (inp) inp.value = '';
+                showVaultFeedback('🔓 Vault unlocked!', false);
+                refreshVaultStatus();
+            } else {
+                showVaultFeedback(data.error || 'Invalid PIN.', true);
+                refreshVaultStatus();
+            }
+        }
+
+        async function lockVaultSession() {
+            await fetch('/api/vault/lock', { method: 'POST' });
+            vaultSessionToken = '';
+            vaultRevealedMap = {};
+            sessionStorage.removeItem('hermes_vault_token');
+            showVaultFeedback('🔒 Vault locked and session cleared.', false);
+            refreshVaultStatus();
+        }
+
+        async function changeVaultPin() {
+            const current_pin = (document.getElementById('vault-old-pin')?.value || '').trim();
+            const new_pin = (document.getElementById('vault-new-pin')?.value || '').trim();
+            const res = await fetch('/api/vault/change_pin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ current_pin, new_pin })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                vaultSessionToken = data.session_token || '';
+                sessionStorage.setItem('hermes_vault_token', vaultSessionToken);
+                document.getElementById('vault-old-pin').value = '';
+                document.getElementById('vault-new-pin').value = '';
+                document.getElementById('vault-change-pin-box').style.display = 'none';
+                showVaultFeedback(data.message || 'PIN updated!', false);
+            } else {
+                showVaultFeedback(data.error || 'Failed to change PIN.', true);
+            }
+        }
+
+        async function saveVaultSecret() {
+            const preset = document.getElementById('vault-key-preset')?.value || 'GEMINI_API_KEY';
+            const customName = (document.getElementById('vault-custom-key-name')?.value || '').trim();
+            const key_name = preset === 'CUSTOM' ? customName : preset;
+            const key_value = (document.getElementById('vault-key-value')?.value || '').trim();
+            if (!key_name || !key_value) {
+                showVaultFeedback('Please select a key name and enter the secret value.', true);
+                return;
+            }
+            const res = await fetch('/api/vault/set_secret', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Vault-Token': vaultSessionToken
+                },
+                body: JSON.stringify({ key_name, key_value, session_token: vaultSessionToken })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                document.getElementById('vault-key-value').value = '';
+                delete vaultRevealedMap[key_name];
+                showVaultFeedback(data.message || 'Saved!', false);
+                showToast('🔐 Encrypted & saved ' + key_name);
+                refreshVaultStatus();
+            } else {
+                showVaultFeedback(data.error || 'Failed to save secret.', true);
+            }
+        }
+
+        async function revealVaultSecret(key_name) {
+            if (vaultRevealedMap[key_name]) {
+                delete vaultRevealedMap[key_name];
+                refreshVaultStatus();
+                return;
+            }
+            const res = await fetch('/api/vault/reveal_secret', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Vault-Token': vaultSessionToken
+                },
+                body: JSON.stringify({ key_name, session_token: vaultSessionToken })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                vaultRevealedMap[key_name] = data.value;
+                refreshVaultStatus();
+            } else {
+                showVaultFeedback(data.error || 'Cannot reveal secret.', true);
+            }
+        }
+
+        async function testVaultSecret(key_name) {
+            const badge = document.getElementById('vault-test-badge-' + key_name);
+            if (badge) { badge.style.color = '#fbbf24'; badge.innerText = 'Testing...'; }
+            const res = await fetch('/api/vault/test_secret', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Vault-Token': vaultSessionToken
+                },
+                body: JSON.stringify({ key_name, session_token: vaultSessionToken })
+            });
+            const data = await res.json();
+            if (badge) {
+                if (data.status === 'ok') {
+                    badge.style.color = '#10b981';
+                    badge.innerText = `✓ ${data.latency_ms}ms`;
+                    showVaultFeedback(`${key_name}: ${data.detail} (${data.latency_ms}ms)`, false);
+                } else {
+                    badge.style.color = '#ef4444';
+                    badge.innerText = `✗ ${data.error || 'Failed'}`;
+                    showVaultFeedback(`${key_name}: ${data.error || 'Check failed'}`, true);
+                }
+            }
+        }
+
+        async function deleteVaultSecret(key_name) {
+            const res = await fetch('/api/vault/delete_secret', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Vault-Token': vaultSessionToken
+                },
+                body: JSON.stringify({ key_name, session_token: vaultSessionToken })
+            });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                delete vaultRevealedMap[key_name];
+                showVaultFeedback(data.message || 'Deleted.', false);
+                refreshVaultStatus();
+            } else {
+                showVaultFeedback(data.error || 'Failed to delete.', true);
+            }
+        }
+
+        setTimeout(refreshVaultStatus, 500);
+    </script>
 </body>
 </html>
 """
