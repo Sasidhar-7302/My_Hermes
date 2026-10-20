@@ -263,6 +263,17 @@ class WatchHealthAnalyzer:
         avg_stress = int(sum(int(r.get("stress_score", 30)) for r in recent) / max(1, len(recent)))
 
         grade = "OPTIMAL" if readiness_score >= 80 else ("MODERATE" if readiness_score >= 65 else "RECOVERY_NEEDED")
+        circadian_corr = {}
+        try:
+            from ecosystem_fusion import analyze_circadian_and_correlations
+            circadian_corr = analyze_circadian_and_correlations(records)
+        except Exception:
+            try:
+                from local_model_lab.ecosystem_fusion import analyze_circadian_and_correlations
+                circadian_corr = analyze_circadian_and_correlations(records)
+            except Exception:
+                circadian_corr = {}
+
         return {
             "readiness_score": readiness_score,
             "readiness_grade": grade,
@@ -276,6 +287,7 @@ class WatchHealthAnalyzer:
             },
             "anomalies": anomalies,
             "recommendations": recommendations,
+            "circadian_and_correlations": circadian_corr,
             "summary_headline": (
                 f"Readiness {readiness_score}/100 ({'Optimal' if readiness_score >= 80 else 'Needs Care'}) • "
                 f"HR {hr} BPM (RHR {rhr}) • HRV {hrv}ms • SpO2 {spo2}% • Sleep {sleep_score}/100 • Steps {steps:,}"

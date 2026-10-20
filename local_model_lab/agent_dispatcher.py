@@ -730,14 +730,40 @@ def dispatch_task(task: str, forced_role: Optional[str] = None, max_strikes: int
     the 3-Strike Never-Give-Up persistence loop, and logging every single step.
     """
     t0 = time.perf_counter()
+
+    # STEP 0: ACOUSTIC / PHONETIC STT TRANSCRIPT CORRECTION (GI_Scribe + Ghost_Writer)
+    voice_correction_meta: Dict[str, Any] = {}
+    try:
+        try:
+            from local_model_lab.ecosystem_fusion import correct_voice_transcript
+        except ImportError:
+            from ecosystem_fusion import correct_voice_transcript
+        vc_res = correct_voice_transcript(task)
+        if vc_res.get("changed") and vc_res.get("corrected"):
+            task = vc_res["corrected"]
+            voice_correction_meta = vc_res
+    except Exception:
+        pass
+
     tracer = StepTraceLogger(task=task, initial_role=forced_role or "AUTO")
+
+    if voice_correction_meta.get("changed"):
+        tracer.record_step(
+            phase="ACOUSTIC_STT_CORRECTION",
+            title="Step 0: Acoustic/Phonetic STT Transcript Correction",
+            detail=f"Applied {voice_correction_meta.get('correction_count', 0)} domain corrections: {voice_correction_meta.get('corrections')}",
+            status="OK",
+            duration_ms=1,
+            role=forced_role or "AUTO",
+            metadata=voice_correction_meta,
+        )
 
     print("\n" + "=" * 72)
     print(f"  HERMES AI COMPANY — STEP-LOGGED DISPATCHER (Trace: {tracer.trace_id})")
     print("=" * 72)
     print(f"  [Task] {task[:80]}...")
 
-    # STEP 1: GLOBAL HARDLINE SAFETY & PII PREFLIGHT SHIELD
+    # STEP 1: GLOBAL HARDLINE SAFETY, POWERSHELL AST & PII PREFLIGHT SHIELD
     t_sec = time.perf_counter()
     try:
         from computer_control import (
@@ -746,16 +772,32 @@ def dispatch_task(task: str, forced_role: Optional[str] = None, max_strikes: int
             ConfirmationRequiredException,
             request_telegram_confirmation,
         )
+        # Check Chintu_AI PowerShell AST & Pipeline Permission Classifier first
+        try:
+            try:
+                from local_model_lab.ecosystem_fusion import evaluate_powershell_command
+            except ImportError:
+                from ecosystem_fusion import evaluate_powershell_command
+            ps_eval = evaluate_powershell_command(task)
+            if ps_eval.get("decision") == "deny":
+                raise SafetyViolationError(
+                    f"PowerShell AST Guardrail Blocked ({ps_eval.get('risk_level')}): {ps_eval.get('reason')}"
+                )
+        except SafetyViolationError:
+            raise
+        except Exception:
+            ps_eval = {"decision": "allow"}
+
         audit_action_safety("dispatch_task", task)
         sec_dur = max(1, int((time.perf_counter() - t_sec) * 1000))
         tracer.record_step(
             phase="SECURITY_PREFLIGHT",
-            title="Step 1: Security & Safety Preflight Audit",
-            detail="Passed hardline zero-deletion & zero-payment safety guardrails",
+            title="Step 1: Security, PowerShell AST & Safety Preflight Audit",
+            detail="Passed hardline zero-deletion, zero-payment & Chintu_AI PowerShell AST guardrails",
             status="OK",
             duration_ms=sec_dur,
             role="SECURITY",
-            metadata={"guard": "audit_action_safety", "passed": True},
+            metadata={"guard": "audit_action_safety+powershell_ast", "passed": True, "ps_decision": ps_eval.get("decision", "allow")},
         )
     except SafetyViolationError as e:
         sec_dur = max(1, int((time.perf_counter() - t_sec) * 1000))

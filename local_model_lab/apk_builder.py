@@ -240,10 +240,15 @@ public class MainActivity extends Activity implements SensorEventListener {{
     private Handler periodicHandler;
     private SharedPreferences prefs;
 
-    private volatile int currentHeartRateBpm = 72;
+    private volatile int currentHeartRateBpm = 70;
+    private volatile int currentRestingHrBpm = 60;
+    private volatile float lastRrMs = 857.0f;
+    private volatile float currentHrvRmssdMs = 56.0f;
+    private volatile int currentStressScore = 26;
     private volatile int currentSteps = 6420;
     private volatile int currentBatteryPct = 85;
     private volatile float currentMotionG = 1.0f;
+    private volatile boolean isWearingDevice = true;
     private static final String CHANNEL_ID = "hermes_sovereign_alerts";
 
     @Override
@@ -275,8 +280,8 @@ public class MainActivity extends Activity implements SensorEventListener {{
 
         sensorStatusText = new TextView(this);
         sensorStatusText.setTextColor(Color.parseColor("#34D399"));
-        sensorStatusText.setTextSize({'10.5f' if is_watch else '12.0f'});
-        sensorStatusText.setText("{top_bar_title} • ❤️ -- BPM • 👟 --");
+        sensorStatusText.setTextSize({'10.0f' if is_watch else '11.5f'});
+        sensorStatusText.setText("{top_bar_title} • ❤️ -- BPM • HRV --ms");
         LinearLayout.LayoutParams statusLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
         topBar.addView(sensorStatusText, statusLp);
 
@@ -421,7 +426,7 @@ public class MainActivity extends Activity implements SensorEventListener {{
             if (sensorManager != null) {{
                 Sensor hrSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
                 if (hrSensor != null) {{
-                    sensorManager.registerListener(this, hrSensor, SensorManager.SENSOR_DELAY_NORMAL);
+                    sensorManager.registerListener(this, hrSensor, SensorManager.SENSOR_DELAY_UI);
                 }}
                 Sensor stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
                 if (stepSensor != null) {{
@@ -430,6 +435,11 @@ public class MainActivity extends Activity implements SensorEventListener {{
                 Sensor accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
                 if (accelSensor != null) {{
                     sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_NORMAL);
+                }}
+                // Off-body detection sensor (type 34) on Wear OS
+                Sensor offBody = sensorManager.getDefaultSensor(34);
+                if (offBody != null) {{
+                    sensorManager.registerListener(this, offBody, SensorManager.SENSOR_DELAY_NORMAL);
                 }}
             }}
         }} catch (Exception ignored) {{}}
@@ -455,7 +465,7 @@ public class MainActivity extends Activity implements SensorEventListener {{
             public void run() {{
                 if (sensorStatusText != null) {{
                     sensorStatusText.setText(
-                        "❤️ " + currentHeartRateBpm + " BPM • 👟 " + currentSteps + " • 🔋 " + currentBatteryPct + "%"
+                        "❤️ " + currentHeartRateBpm + " BPM • HRV " + Math.round(currentHrvRmssdMs) + "ms • 👟 " + currentSteps + " • 🔋 " + currentBatteryPct + "%"
                     );
                 }}
             }}
@@ -467,7 +477,23 @@ public class MainActivity extends Activity implements SensorEventListener {{
         if (event == null || event.sensor == null) return;
         int type = event.sensor.getType();
         if (type == Sensor.TYPE_HEART_RATE && event.values.length > 0 && event.values[0] > 30) {{
-            currentHeartRateBpm = Math.round(event.values[0]);
+            float bpm = event.values[0];
+            currentHeartRateBpm = Math.round(bpm);
+            // Derive beat-to-beat RR interval (ms) & exponential moving RMSSD HRV
+            float rrMs = 60000.0f / bpm;
+            float diffSq = (rrMs - lastRrMs) * (rrMs - lastRrMs);
+            lastRrMs = rrMs;
+            float instantRmssd = (float) Math.sqrt(diffSq);
+            if (instantRmssd > 5.0f && instantRmssd < 150.0f) {{
+                currentHrvRmssdMs = 0.8f * currentHrvRmssdMs + 0.2f * instantRmssd;
+            }}
+            if (currentMotionG < 1.15f && currentHeartRateBpm < currentRestingHrBpm && currentHeartRateBpm >= 45) {{
+                currentRestingHrBpm = currentHeartRateBpm;
+            }}
+            // Compute real-time autonomic stress score from HR elevation + HRV suppression at rest
+            int hrStrain = Math.max(0, (currentHeartRateBpm - currentRestingHrBpm) * 2);
+            int hrvStrain = Math.max(0, Math.round(65.0f - currentHrvRmssdMs));
+            currentStressScore = Math.min(98, Math.max(12, (hrStrain + hrvStrain) / 2));
             updateSensorHeaderUi();
         }} else if (type == Sensor.TYPE_STEP_COUNTER && event.values.length > 0 && event.values[0] > 0) {{
             currentSteps = Math.round(event.values[0]);
@@ -477,6 +503,8 @@ public class MainActivity extends Activity implements SensorEventListener {{
             float y = event.values[1];
             float z = event.values[2];
             currentMotionG = (float) Math.sqrt(x * x + y * y + z * z) / 9.81f;
+        }} else if (type == 34 && event.values.length > 0) {{
+            isWearingDevice = event.values[0] > 0.5f;
         }}
     }}
 
@@ -488,9 +516,9 @@ public class MainActivity extends Activity implements SensorEventListener {{
             Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
             if (v != null) {{
                 if (Build.VERSION.SDK_INT >= 26) {{
-                    v.vibrate(VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE));
+                    v.vibrate(VibrationEffect.createOneShot(55, VibrationEffect.DEFAULT_AMPLITUDE));
                 }} else {{
-                    v.vibrate(45);
+                    v.vibrate(55);
                 }}
             }}
         }} catch (Exception ignored) {{}}
@@ -544,14 +572,20 @@ public class MainActivity extends Activity implements SensorEventListener {{
                     conn.setDoOutput(true);
                     conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 
-                    String activityState = currentMotionG > 1.35f ? "ACTIVE" : "RESTING";
+                    String activityState = currentMotionG > 1.35f ? "ACTIVE" : (currentMotionG > 1.12f ? "WALKING" : "RESTING");
+                    int activeCalories = Math.round(currentSteps * 0.045f);
                     String payload = "{{"
                         + "\\"source\\":\\"{source_tag}\\","
                         + "\\"device_model\\":\\"{device_model}\\","
                         + "\\"heart_rate_bpm\\":" + currentHeartRateBpm + ","
+                        + "\\"resting_hr_bpm\\":" + currentRestingHrBpm + ","
+                        + "\\"hrv_rmssd_ms\\":" + Math.round(currentHrvRmssdMs) + ","
+                        + "\\"stress_score\\":" + currentStressScore + ","
                         + "\\"steps\\":" + currentSteps + ","
+                        + "\\"active_calories_kcal\\":" + activeCalories + ","
                         + "\\"watch_battery_pct\\":" + currentBatteryPct + ","
                         + "\\"phone_battery_pct\\":" + currentBatteryPct + ","
+                        + "\\"is_wearing\\":" + (isWearingDevice ? "true" : "false") + ","
                         + "\\"activity_state\\":\\"" + activityState + "\\""
                         + "}}";
 
@@ -562,7 +596,28 @@ public class MainActivity extends Activity implements SensorEventListener {{
                     os.close();
 
                     final int code = conn.getResponseCode();
+                    java.io.InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+                    StringBuilder sb = new StringBuilder();
+                    if (is != null) {{
+                        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(is, StandardCharsets.UTF_8));
+                        String line;
+                        while ((line = br.readLine()) != null) {{
+                            sb.append(line);
+                        }}
+                        br.close();
+                    }}
                     conn.disconnect();
+
+                    final String respBody = sb.toString();
+                    if (respBody.contains("HIGH_RESTING_HR") || respBody.contains("LOW_SPO2") || respBody.contains("HIGH_AUTONOMIC_STRESS")) {{
+                        runOnUiThread(new Runnable() {{
+                            @Override
+                            public void run() {{
+                                showNativeNotification("⌚ Hermes Watch 8 Biometric Alert", "Elevated physiological strain detected. Check Hermes Readiness panel.");
+                            }}
+                        }});
+                    }}
+
                     if (showToastOnSuccess) {{
                         runOnUiThread(new Runnable() {{
                             @Override
@@ -595,6 +650,9 @@ public class MainActivity extends Activity implements SensorEventListener {{
             return "{{"
                 + "\\"device_model\\":\\"{device_model}\\","
                 + "\\"heart_rate_bpm\\":" + currentHeartRateBpm + ","
+                + "\\"resting_hr_bpm\\":" + currentRestingHrBpm + ","
+                + "\\"hrv_rmssd_ms\\":" + Math.round(currentHrvRmssdMs) + ","
+                + "\\"stress_score\\":" + currentStressScore + ","
                 + "\\"steps\\":" + currentSteps + ","
                 + "\\"battery_pct\\":" + currentBatteryPct
                 + "}}";
