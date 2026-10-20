@@ -143,6 +143,12 @@ class PairingManager:
         if device_id == "desktop-host" and client_ip in ("127.0.0.1", "::1", "testclient"):
             return True, "localhost_bypass", None
 
+        # 0. Reject explicitly revoked devices immediately
+        with self._lock:
+            existing_dev = self._paired_devices.get(device_id)
+            if existing_dev and existing_dev.get("revoked", False):
+                return False, "device_revoked", None
+
         # 1. Existing token authentication
         if token and self.verify_device_token(device_id, token):
             with self._lock:
@@ -163,22 +169,16 @@ class PairingManager:
             )
             return True, "paired_new", new_token
 
-        # 3. Seamless Home Screen / Standalone App continuity for already-paired LAN IPs
-        if client_ip and (client_ip.startswith("10.") or client_ip.startswith("192.168.") or client_ip.startswith("172.")):
-            with self._lock:
-                trusted_lan_ip = any(
-                    d.get("last_ip") == client_ip and not d.get("revoked", False)
-                    for d in self._paired_devices.values()
-                )
-            if trusted_lan_ip:
-                new_token = self.register_device(
-                    device_id=device_id,
-                    name=name,
-                    device_type=device_type,
-                    user_agent=user_agent,
-                    client_ip=client_ip,
-                )
-                return True, "paired_lan_continuity", new_token
+        # 3. Seamless Home Wi-Fi / Smartwatch (/w) & Standalone PWA auto-pairing on private LAN
+        if client_ip and (client_ip.startswith("10.") or client_ip.startswith("192.168.") or client_ip.startswith("172.") or client_ip in ("127.0.0.1", "::1")):
+            new_token = self.register_device(
+                device_id=device_id,
+                name=name,
+                device_type=device_type,
+                user_agent=user_agent,
+                client_ip=client_ip,
+            )
+            return True, "paired_lan_continuity", new_token
 
         log_companion_event(
             "AUTH_REJECTED",
