@@ -437,6 +437,42 @@ class TestHermesGoldenHarnessAndGuardrails(unittest.TestCase):
         self.assertGreaterEqual(listed["total_count"], 2)
         nc.mark_read(norm_res["notification"]["id"])
 
+    def test_11_muse_insights_vram_advisor_box_noul_and_context_pruner(self):
+        """Verifies Jev 1.14 Box+Noul UI gate, Uber deterministic context collector + Perplexity SPACE scrub, Named Personas, and RTX 4060 Ti 16GB Qwen3.5-9B advisor."""
+        from laya_router import verify_ui_box_with_noul_gate
+        from agent_dispatcher import (
+            deterministic_prune_and_scrub_context,
+            get_vram_kv_cache_profile,
+            ROLE_PERSONAS,
+        )
+
+        # 1. Jev 1.14 Box + Noul existence gate
+        ok_box = verify_ui_box_with_noul_gate("Submit Order", "Window: Cart | Button: Submit Order | Cancel")
+        self.assertTrue(ok_box["verified"])
+        self.assertEqual(ok_box["decision"], "CLICK_APPROVED")
+        self.assertIsNotNone(ok_box["box"])
+
+        absent_box = verify_ui_box_with_noul_gate("Delete Account", "Window: Settings | Save Profile | Logout")
+        self.assertFalse(absent_box["verified"])
+        self.assertEqual(absent_box["decision"], "NOUL_ELEMENT_ABSENT")
+        self.assertIsNone(absent_box["box"])
+
+        # 2. Uber deterministic context pruner + Perplexity SPACE boundary secret scrub
+        noisy_telemetry = "\n".join(
+            ["INFO: duplicate log line that repeats 50 times across megabytes of output"] * 40
+            + ["SECRET_LEAK: gsk_1234567890abcdefghijklmnopqrstuvwxyz123456"]
+        )
+        pruned = deterministic_prune_and_scrub_context(noisy_telemetry, max_chars=600)
+        self.assertNotIn("gsk_1234567890", pruned)
+        self.assertLessEqual(len(pruned), 750)
+
+        # 3. RTX 4060 Ti 16GB Qwen3.5-9B + q8_0 KV-cache advisor & 10 Named Personas
+        vram = get_vram_kv_cache_profile()
+        self.assertIn("Qwen3.5-9B", vram["primary_local_pick"]["model"])
+        self.assertEqual(len(ROLE_PERSONAS), 10)
+        self.assertEqual(ROLE_PERSONAS["OPERATOR"]["persona_name"], "Jev")
+
+
 
 
 if __name__ == "__main__":

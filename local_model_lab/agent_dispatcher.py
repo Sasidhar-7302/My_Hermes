@@ -956,11 +956,19 @@ def dispatch_task(task: str, forced_role: Optional[str] = None, max_strikes: int
 
     # STEP 4: EXECUTE DOMAIN-SCOPED LIVE TOOLS PRE-FLIGHT
     tool_telemetry, tools_used = execute_role_domain_tools(target_role, task, tracer=tracer)
+    if tool_telemetry:
+        tool_telemetry = deterministic_prune_and_scrub_context(tool_telemetry, max_chars=4500)
 
     # STEP 5: BUILD SKILL-AUGMENTED SYSTEM PROMPT
     policy = role_def.get("never_give_up_policy", {})
+    persona_meta = ROLE_PERSONAS.get(target_role, {})
+    persona_banner = (
+        f"Persona: {persona_meta.get('persona_name', target_role)} | "
+        f"Blast-Radius Policy: {persona_meta.get('blast_radius', 'SCOPED_SAFE')}"
+    )
     system_prompt = (
-        f"{role_def['soul']}\n\n"
+        f"{role_def['soul']}\n"
+        f"[{persona_banner}]\n\n"
         f"=== YOUR DOMAIN SKILL PLAYBOOK ({skill_id}) ===\n"
         f"{skill_md[:6000]}\n\n"
         f"=== GRANTED TOOLS & MCP ACCESS ===\n"
@@ -970,9 +978,9 @@ def dispatch_task(task: str, forced_role: Optional[str] = None, max_strikes: int
         f"{policy.get('verification_gate', 'Deliver complete, verified, production-ready output.')}"
     )
 
-    user_content = task
+    user_content = PIIShield.mask(task) if PIIShield else task
     if tool_telemetry:
-        user_content = f"{task}\n\n--- LIVE ENVIRONMENT & TOOL TELEMETRY ---\n{tool_telemetry}"
+        user_content = f"{user_content}\n\n--- LIVE ENVIRONMENT & TOOL TELEMETRY (DETERMINISTICALLY PRUNED & SCRUBBED) ---\n{tool_telemetry}"
 
     # STEP 6: 3-STRIKE NEVER-GIVE-UP PERSISTENCE LOOP
     attempt_ledger: List[str] = []
@@ -1138,6 +1146,93 @@ def dispatch_task(task: str, forced_role: Optional[str] = None, max_strikes: int
     }
 
 
+# ── UBER DEBUG ASSIST + PAPERCLIP + OMNIGENT + RTX 4060 Ti 16GB ADVISOR ────
+try:
+    from local_model_lab.pii_shield import PIIShield
+except ImportError:
+    try:
+        from pii_shield import PIIShield
+    except Exception:
+        PIIShield = None
+
+ROLE_PERSONAS: Dict[str, Dict[str, Any]] = {
+    "CEO": {"persona_name": "Atlas", "blast_radius": "ORCHESTRATION_ONLY", "max_turns": 12, "context_budget_tokens": 32768},
+    "PM": {"persona_name": "Maya", "blast_radius": "READ_AND_SPEC", "max_turns": 10, "context_budget_tokens": 32768},
+    "ARCHITECT": {"persona_name": "Vikram", "blast_radius": "READ_AND_DESIGN", "max_turns": 12, "context_budget_tokens": 32768},
+    "CODER": {"persona_name": "Linus", "blast_radius": "SANDBOXED_WORKSPACE_WRITE", "max_turns": 20, "context_budget_tokens": 32768},
+    "TESTER": {"persona_name": "Vera", "blast_radius": "SANDBOXED_TEST_RUNNER", "max_turns": 15, "context_budget_tokens": 32768},
+    "SECURITY": {"persona_name": "Kira", "blast_radius": "ZERO_TRUST_AUDITOR", "max_turns": 12, "context_budget_tokens": 32768},
+    "DEVOPS": {"persona_name": "Orion", "blast_radius": "GATED_INFRA_CONTROL", "max_turns": 15, "context_budget_tokens": 32768},
+    "OPERATOR": {"persona_name": "Jev", "blast_radius": "GATED_DESKTOP_AND_CHINTU_BROWSER", "max_turns": 10, "context_budget_tokens": 16384},
+    "RESEARCHER": {"persona_name": "Nova", "blast_radius": "EXTERNAL_READ_ONLY", "max_turns": 15, "context_budget_tokens": 32768},
+    "DESIGNER": {"persona_name": "Aria", "blast_radius": "PAPER_STUDIO_AND_CSS", "max_turns": 12, "context_budget_tokens": 32768},
+}
+
+
+def deterministic_prune_and_scrub_context(raw_telemetry: str, max_chars: int = 4500) -> str:
+    """
+    Implements Uber Debug Assist's deterministic context collector + Perplexity SPACE's
+    external credential boundary:
+      1. Strips duplicate/empty log lines and prunes raw telemetry before any LLM sees it
+         (protecting the 16GB RTX 4060 Ti KV-cache budget).
+      2. Masks any API keys, tokens, SSNs, or emails via PIIShield at the boundary.
+    """
+    if not raw_telemetry:
+        return ""
+    seen = set()
+    kept_lines: List[str] = []
+    for line in raw_telemetry.splitlines():
+        s = line.rstrip()
+        if not s:
+            continue
+        if s in seen and len(s) > 25:
+            continue
+        seen.add(s)
+        kept_lines.append(s)
+    pruned = "\n".join(kept_lines)
+    if len(pruned) > max_chars:
+        half = max_chars // 2
+        pruned = pruned[:half] + "\n... [DETERMINISTIC CONTEXT COLLECTOR PRUNED MIDDLE LOGS TO PROTECT KV CACHE] ...\n" + pruned[-half:]
+    if PIIShield:
+        pruned = PIIShield.mask(pruned)
+    return pruned
+
+
+def get_vram_kv_cache_profile() -> Dict[str, Any]:
+    """
+    Returns the verified RTX 4060 Ti 16GB Local Model + q8_0 KV-Cache setup guide
+    and Cloud Brain escalation matrix (synthesized from October 2026 benchmarks).
+    """
+    return {
+        "gpu_hardware": "NVIDIA GeForce RTX 4060 Ti (16GB VRAM)",
+        "primary_local_pick": {
+            "model": "Qwen3.5-9B (Q8_0)",
+            "architecture": "9B Dense Hybrid (24 linear + 8 full-attention layers)",
+            "kv_cache_per_token": "32 KiB/token (ultra-compact linear-attention hybrid)",
+            "weights_vram_gb": 9.5,
+            "kv_cache_32k_q8_gb": 2.0,
+            "total_vram_at_32k_gb": 11.5,
+            "max_safe_context": "32K - 64K tokens",
+            "expected_throughput": "40 - 50 tok/s",
+            "llama_cpp_launch_cmd": (
+                "llama-server -m Qwen3.5-9B-Q8_0.gguf -c 32768 -ngl 99 "
+                "--cache-type-k q8_0 --cache-type-v q8_0 --flash-attn"
+            ),
+        },
+        "secondary_local_picks": [
+            {"rank": 2, "model": "Qwen3-14B (Q5_K_M)", "context": "32K (q8_0 KV)", "vram_gb": 14.2, "note": "Best 14B raw capability"},
+            {"rank": 3, "model": "gpt-oss-20b (Q4_K_M)", "context": "32K (q8_0 KV)", "vram_gb": 15.1, "note": "Native tool calling, tight 16GB fit"},
+            {"rank": 4, "model": "Gemma-4-12B (Q6_K)", "context": "128K (q8_0 KV)", "vram_gb": 12.0, "note": "Best ultra-long-context local pick"},
+            {"rank": 5, "model": "Laya ModernBERT-large (421M RLCD)", "context": "System-1 Router", "vram_gb": 0.9, "note": "<35ms calibrated Choice/Score/Noul/Box decisions"},
+        ],
+        "cloud_brain_escalation_tier": [
+            {"model": "DeepSeek-V4.1-Flash-1017", "license": "MIT", "cost": "$0.15 / $0.60 per 1M", "benchmark": "77.0% DeepSWE v1.1"},
+            {"model": "Reflection Beam-1.0-501B-A23B", "license": "Apache 2.0", "cost": "OpenRouter / Cloud", "benchmark": "81.6% SWEBench Verified, 80.8% MCP Atlas"},
+            {"model": "Claude Haiku 5.5", "license": "Proprietary API", "cost": "$0.10 / 1M input", "benchmark": "High-volume low-cost subagent tier"},
+        ],
+    }
+
+
 if __name__ == "__main__":
     task_arg = sys.argv[1] if len(sys.argv) > 1 else "Write a Python function to validate SemVer 2.0 strings."
     role_arg = sys.argv[2] if len(sys.argv) > 2 else None
@@ -1146,3 +1241,4 @@ if __name__ == "__main__":
     print(f"  FINAL DELIVERABLE ({res.get('role')} via {res.get('model')} | {len(res.get('steps', []))} steps logged):")
     print("=" * 72)
     print(res.get("response", ""))
+

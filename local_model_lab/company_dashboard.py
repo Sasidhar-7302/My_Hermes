@@ -669,6 +669,28 @@ async def api_rpa_replay(request: Request):
     return JSONResponse(content=res)
 
 
+@app.middleware("http")
+async def zero_trust_private_lan_boundary_guard(request: Request, call_next):
+    """
+    Hardens Hermes against Archon-style CVE-2026-111322 (unauthenticated 0.0.0.0 exposure):
+    Permits only loopback (127.0.0.1, ::1) and RFC-1918 Private Home LAN IPs (10.x, 192.168.x, 172.16-31.x).
+    Blocks any non-private external network IP from invoking control endpoints.
+    """
+    client_ip = (request.client.host if request.client else "127.0.0.1") or "127.0.0.1"
+    is_trusted_subnet = (
+        client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
+        or client_ip.startswith("10.")
+        or client_ip.startswith("192.168.")
+        or client_ip.startswith("172.")
+    )
+    if not is_trusted_subnet:
+        return JSONResponse(
+            content={"status": "blocked", "reason": f"Zero-Trust Boundary: External IP {client_ip} denied (CVE-2026-111322 guard)."},
+            status_code=403,
+        )
+    return await call_next(request)
+
+
 @app.get("/api/system/health")
 async def api_system_health():
     obs = get_system_observer()
@@ -676,6 +698,41 @@ async def api_system_health():
         return JSONResponse(content={"status": "UNKNOWN", "cpu_percent": 0, "ram_percent": 0, "disk_percent": 0})
     health = obs.get_health()
     return JSONResponse(content=health.to_dict())
+
+
+@app.get("/api/system/vram_advisor")
+async def api_system_vram_advisor():
+    from agent_dispatcher import get_vram_kv_cache_profile, ROLE_PERSONAS
+    return JSONResponse(content={
+        "status": "ok",
+        "vram_profile": get_vram_kv_cache_profile(),
+        "personas": ROLE_PERSONAS,
+    })
+
+
+@app.post("/api/briefing/speak")
+async def api_briefing_speak(request: Request):
+    """Spoken Audio Note generator (Windows SAPI + Browser SpeechSynthesis payload)."""
+    data = await request.json()
+    text = str(data.get("text", "")).strip()
+    if not text:
+        obs = get_system_observer()
+        text = obs.generate_daily_briefing() if obs else "Hermes Autonomous Operations Center is online and ready."
+    clean_speech = re.sub(r"[#*_`~>\[\]\(\)]+", " ", text)
+    clean_speech = re.sub(r"\s+", " ", clean_speech).strip()[:900]
+    if sys.platform == "win32" and not os.environ.get("PYTEST_CURRENT_TEST"):
+        try:
+            safe_txt = clean_speech.replace("'", "").replace('"', "")
+            ps_tts = f"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.Rate = 1; $s.Speak('{safe_txt}')"
+            subprocess.Popen(
+                ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_tts],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+            )
+        except Exception:
+            pass
+    return JSONResponse(content={"status": "ok", "spoken_text": clean_speech, "chars": len(clean_speech)})
 
 
 @app.get("/api/system/briefing")

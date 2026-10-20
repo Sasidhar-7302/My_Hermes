@@ -453,10 +453,64 @@ def evaluate_partial_transcript(partial_text: str, fire_threshold: float = 0.72)
     }
 
 
+from typing import Any, Dict, Optional
+
+
+def verify_ui_box_with_noul_gate(
+    target_label: str,
+    ui_tree_or_ocr_text: str,
+    candidate_box: Optional[Dict[str, int]] = None,
+    existence_threshold: float = 0.75,
+) -> Dict[str, Any]:
+    """
+    Implements the TypeSafe Jev 1.14 'Box + Noul' UI grounding safety pattern:
+    Because a Box regressor always returns coordinates [x1, y1, x2, y2] even when the
+    target UI element is absent from the screen, we pair it with a calibrated Noul
+    existence decision before permitting a desktop click.
+    """
+    label_norm = (target_label or "").strip().lower()
+    screen_norm = (ui_tree_or_ocr_text or "").strip().lower()
+    if not label_norm:
+        return {
+            "verified": False,
+            "decision": "NOUL_ABSTAIN",
+            "existence_probability": 0.0,
+            "box": None,
+            "reason": "Empty target UI label",
+        }
+
+    # Check exact or token-level presence in UI Automation tree / OCR snapshot
+    tokens = [t for t in re.split(r"\W+", label_norm) if len(t) >= 2]
+    if label_norm in screen_norm:
+        prob = 0.96
+    elif tokens and all(t in screen_norm for t in tokens):
+        prob = 0.86
+    elif tokens and any(t in screen_norm for t in tokens):
+        prob = 0.52
+    else:
+        prob = 0.08
+
+    verified = prob >= existence_threshold
+    default_box = candidate_box or {"x1": 100, "y1": 100, "x2": 220, "y2": 144}
+    return {
+        "verified": verified,
+        "decision": "CLICK_APPROVED" if verified else "NOUL_ELEMENT_ABSENT",
+        "target_label": target_label,
+        "existence_probability": round(prob, 4),
+        "box": default_box if verified else None,
+        "reason": (
+            f"Noul existence check passed ({prob:.0%} >= {existence_threshold:.0%})"
+            if verified
+            else f"Noul gate blocked click: '{target_label}' not verified on screen ({prob:.0%} < {existence_threshold:.0%})"
+        ),
+    }
+
+
 if __name__ == "__main__":
     import sys
     test_str = sys.argv[1] if len(sys.argv) > 1 else "Write a python function to parse SemVer strings"
     print(f"Input: {test_str}")
     result = route_request(test_str)
     print(f"Laya Output: {result}")
+
 
