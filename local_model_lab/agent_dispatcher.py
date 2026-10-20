@@ -42,24 +42,33 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "").lower()
         pass
 
 _ENV: Dict[str, str] = {}
-for _env_candidate in (
-    os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
-    os.path.join(os.path.dirname(__file__), "..", ".env"),
-    os.path.join(os.path.dirname(__file__), ".env"),
-):
-    try:
-        if os.path.exists(_env_candidate):
-            with open(_env_candidate, "r", encoding="utf-8") as f:
-                for line in f:
-                    line_s = line.strip()
-                    if "=" in line_s and not line_s.startswith("#"):
-                        k, _, v = line_s.partition("=")
-                        k_c = k.strip()
-                        v_c = v.strip().strip('"').strip("'")
-                        if v_c and k_c not in _ENV:
-                            _ENV[k_c] = v_c
-    except Exception:
-        pass
+
+
+def _reload_env() -> Dict[str, str]:
+    """Loads/refreshes environment keys from local .env files without committing secrets."""
+    for _env_candidate in (
+        str(Path.home() / ".hermes" / ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+    ):
+        try:
+            if os.path.exists(_env_candidate):
+                with open(_env_candidate, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line_s = line.strip()
+                        if "=" in line_s and not line_s.startswith("#"):
+                            k, _, v = line_s.partition("=")
+                            k_c = k.strip()
+                            v_c = v.strip().strip('"').strip("'")
+                            if v_c:
+                                _ENV[k_c] = v_c
+        except Exception:
+            pass
+    return _ENV
+
+
+_reload_env()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -149,7 +158,11 @@ def get_key(provider: str) -> str:
     key_name = PROVIDER_KEY_NAMES.get(provider)
     if not key_name:
         return "no-key-needed"
-    return _ENV.get(key_name) or os.environ.get(key_name, "")
+    val = _ENV.get(key_name) or os.environ.get(key_name, "")
+    if not val:
+        _reload_env()
+        val = _ENV.get(key_name) or os.environ.get(key_name, "")
+    return val
 
 
 def call_model(
@@ -174,7 +187,13 @@ def call_model(
             r = requests.post(url, json=payload, timeout=timeout_s)
             lat = int((time.time() - start) * 1000)
             if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"], lat, "OK"
+                cand = (r.json().get("candidates") or [{}])[0]
+                parts = (cand.get("content") or {}).get("parts") or []
+                non_thought = [p.get("text", "") for p in parts if p.get("text") and not p.get("thought")]
+                text_out = "\n".join(non_thought).strip() or "\n".join([p.get("text", "") for p in parts if p.get("text")]).strip()
+                if text_out:
+                    return text_out, lat, "OK"
+                return None, lat, "EMPTY_CANDIDATE"
             return None, lat, f"HTTP_{r.status_code}"
         except Exception as e:
             return None, int((time.time() - start) * 1000), str(e)
@@ -187,7 +206,7 @@ def call_model(
         lat = int((time.time() - start) * 1000)
         if r.status_code == 200:
             msg = r.json()["choices"][0]["message"]
-            content = msg.get("content") or msg.get("reasoning_content") or ""
+            content = msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or ""
             return content, lat, "OK"
         return None, lat, f"HTTP_{r.status_code}"
     except Exception as e:

@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 
 PROVIDER_BASE_URLS = {
     "ollama_local":  "http://127.0.0.1:11434/v1",
+    "ollama_cloud":  "https://ollama.com/v1",
     "openrouter":    "https://openrouter.ai/api/v1",
     "nvidia":        "https://integrate.api.nvidia.com/v1",
     "groq":          "https://api.groq.com/openai/v1",
@@ -21,6 +22,7 @@ PROVIDER_BASE_URLS = {
 
 PROVIDER_KEY_NAMES = {
     "ollama_local":  None,
+    "ollama_cloud":  "OLLAMA_API_KEY",
     "openrouter":    "OPENROUTER_API_KEY",
     "nvidia":        "NVIDIA_API_KEY",
     "groq":          "GROQ_API_KEY",
@@ -28,18 +30,27 @@ PROVIDER_KEY_NAMES = {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# QUOTA & LIMITS STRATEGY (FREE TIERS)
+# QUOTA & LIMITS STRATEGY (FREE TIERS + OLLAMA CLOUD + LOCAL SOVEREIGN)
 # ─────────────────────────────────────────────────────────────────────────────
-# GROQ:      Insanely fast (<400ms). Strict RPM (Requests Per Minute) limits.
-#            Use for: Fast routing, DevOps commands, quick testing.
-# NVIDIA:    Credit-based free tier. Huge models (550B, 120B).
-#            Use for: Heavy lifting (Architect, Coder, Security, Researcher).
-# GEMINI:    15 RPM / 1M tokens free tier. Huge context window.
-#            Use for: PM specs, massive log reading, document parsing, UI design.
-# LOCAL:     Unlimited. Free. Private. Sovereign fallback.
-#            Use for: CEO, Operator, Fallbacks, sensitive data.
+# OLLAMA CLOUD: Free tier verified HTTP 200 (Reflection Beam 501B, Nemotron 3 Ultra 550B,
+#               Nemotron 3 Super 120B, Gemma 4 31B, gpt-oss 120B, MiniMax M3.1 Flash).
+# GROQ:         Insanely fast (<400ms). Strict RPM (Requests Per Minute) limits.
+#               Use for: Fast routing, DevOps commands, quick testing.
+# GEMINI:       15 RPM / 1M tokens free tier. Huge context window (gemini-2.5-flash / 3.6-flash).
+#               Use for: PM specs, massive log reading, document parsing, UI design.
+# NVIDIA:       Credit-based free tier. Huge models (550B, 120B).
+# LOCAL:        Unlimited. Free. Private. Sovereign fallback (hermes-local, qwen3.5:9b).
 
 VERIFIED_MODELS = {
+    # OLLAMA CLOUD (Verified HTTP 200 on Free Plan via OLLAMA_API_KEY)
+    "ollama-beam":       {"id": "beam",              "provider": "ollama_cloud", "latency_ms": 703,  "quota": "Ollama Cloud"},
+    "ollama-ultra550b":  {"id": "nemotron-3-ultra",  "provider": "ollama_cloud", "latency_ms": 1508, "quota": "Ollama Cloud"},
+    "ollama-super120b":  {"id": "nemotron-3-super",  "provider": "ollama_cloud", "latency_ms": 1309, "quota": "Ollama Cloud"},
+    "ollama-gpt120b":    {"id": "gpt-oss:120b",      "provider": "ollama_cloud", "latency_ms": 637,  "quota": "Ollama Cloud"},
+    "ollama-gpt20b":     {"id": "gpt-oss:20b",       "provider": "ollama_cloud", "latency_ms": 798,  "quota": "Ollama Cloud"},
+    "ollama-gemma4-31b": {"id": "gemma4:31b",        "provider": "ollama_cloud", "latency_ms": 598,  "quota": "Ollama Cloud"},
+    "ollama-minimax":    {"id": "minimax-m3.1-flash","provider": "ollama_cloud", "latency_ms": 882,  "quota": "Ollama Cloud"},
+
     # GROQ (Ultra Fast, RPM limited)
     "groq-gpt120b":  {"id": "openai/gpt-oss-120b", "provider": "groq", "latency_ms": 331, "quota": "Strict RPM"},
     "groq-qwen27b":  {"id": "qwen/qwen3.8-27b",    "provider": "groq", "latency_ms": 307, "quota": "Strict RPM"},
@@ -49,9 +60,10 @@ VERIFIED_MODELS = {
     "nim-120b":      {"id": "nvidia/nemotron-3-super-120b-a12b", "provider": "nvidia", "latency_ms": 957, "quota": "Credits"},
     "nim-30b":       {"id": "nvidia/nemotron-3.5-lightning-30b-a3b", "provider": "nvidia", "latency_ms": 1841, "quota": "Credits"},
 
-    # GEMINI (Huge Context, 15 RPM)
-    "gemini-flash":  {"id": "gemini-3.8-flash",     "provider": "gemini", "latency_ms": 6345, "quota": "15 RPM"},
-    "gemini-pro":    {"id": "gemini-3.1-pro-preview","provider": "gemini", "latency_ms": 4000, "quota": "15 RPM"},
+    # GEMINI (Huge Context, 15 RPM — Verified HTTP 200)
+    "gemini-flash":  {"id": "gemini-2.5-flash", "provider": "gemini", "latency_ms": 656,  "quota": "15 RPM"},
+    "gemini-pro":    {"id": "gemini-3.6-flash", "provider": "gemini", "latency_ms": 1269, "quota": "15 RPM"},
+    "gemini-35":     {"id": "gemini-3.5-flash", "provider": "gemini", "latency_ms": 1696, "quota": "15 RPM"},
 
     # OPENROUTER (Free Tier)
     "or-deepseek":   {"id": "deepseek/deepseek-v4.1-flash", "provider": "openrouter", "latency_ms": 582, "quota": "OR Free Tier"},
@@ -111,7 +123,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Execute sovereign local fallback (hermes-local / qwen3.5:9b) + deterministic Python verification.",
             "verification_gate": "Deliverable must contain concrete owner assignments, quantified trade-offs, and verified status."
         },
-        "models": [M("local-hermes"), M("local-qwen9b"), M("nim-120b"), M("groq-gpt120b"), M("gemini-flash")],
+        "models": [M("ollama-beam"), M("groq-gpt120b"), M("gemini-flash"), M("local-hermes"), M("local-qwen9b"), M("ollama-ultra550b")],
         "fire_threshold": 0.45,
     },
     "PM": {
@@ -143,7 +155,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Synthesize complete first-principles PRD with explicit RICE table, Gherkin criteria, and Non-Goals.",
             "verification_gate": "Every requirement must include testable Given-When-Then criteria and explicit Out-of-Scope boundaries."
         },
-        "models": [M("or-glm53"), M("nim-120b"), M("local-hermes"), M("gemini-flash"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("gemini-flash"), M("gemini-pro"), M("ollama-gemma4-31b"), M("groq-gpt120b"), M("ollama-minimax"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.70,
     },
     "ARCHITECT": {
@@ -174,7 +186,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Provide dual-tier architecture (Cloud Scale + Zero-Dependency Local Sovereign Tier).",
             "verification_gate": "Blueprint must include concrete schema/contract definitions, trade-off matrix, and failure recovery."
         },
-        "models": [M("nim-550b"), M("nim-120b"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("ollama-ultra550b"), M("ollama-beam"), M("gemini-pro"), M("groq-gpt120b"), M("nim-550b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.72,
     },
     "CODER": {
@@ -206,7 +218,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Engineer a self-contained stdlib fallback so the feature executes 100% deterministically.",
             "verification_gate": "Code must contain zero TODO/placeholder stubs and pass syntax/runtime verification."
         },
-        "models": [M("nim-550b"), M("nim-120b"), M("or-deepseek"), M("local-hermes"), M("groq-qwen27b"), M("local-qwen9b")],
+        "models": [M("ollama-beam"), M("groq-qwen27b"), M("ollama-ultra550b"), M("gemini-pro"), M("nim-550b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.62,
     },
     "TESTER": {
@@ -238,7 +250,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Run adversarial fuzzing + 3 consecutive regression passes to guarantee zero flakiness.",
             "verification_gate": "Test suite must cover happy path, boundary/malformed inputs, and explicit assertions."
         },
-        "models": [M("or-deepseek"), M("nim-120b"), M("local-hermes"), M("groq-qwen27b"), M("gemini-flash"), M("local-qwen9b")],
+        "models": [M("groq-qwen27b"), M("ollama-beam"), M("gemini-flash"), M("ollama-super120b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.68,
     },
     "SECURITY": {
@@ -269,7 +281,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Author drop-in hardened remediation code + permanent adversarial regression test.",
             "verification_gate": "Audit must identify exact threat vectors, severity, and provide concrete hardened remediation code."
         },
-        "models": [M("nim-550b"), M("nim-120b"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("ollama-ultra550b"), M("ollama-beam"), M("groq-gpt120b"), M("gemini-pro"), M("nim-550b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.78,
     },
     "DEVOPS": {
@@ -301,7 +313,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Activate fallback runtime and install persistent HermesWatchdog self-healing rule.",
             "verification_gate": "Infrastructure scripts/configs must include health checks, resource bounds, and non-root execution."
         },
-        "models": [M("nim-30b"), M("or-deepseek"), M("local-hermes"), M("groq-qwen27b"), M("local-llama")],
+        "models": [M("groq-qwen27b"), M("ollama-minimax"), M("ollama-super120b"), M("gemini-flash"), M("local-hermes"), M("local-llama")],
         "fire_threshold": 0.65,
     },
     "OPERATOR": {
@@ -335,7 +347,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Fallback to deterministic keyboard hotkeys / headless Chintu DOM extraction.",
             "verification_gate": "Action must pass audit_action_safety, preserve Chintu Profile 1 isolation, and confirm window state."
         },
-        "models": [M("local-hermes"), M("local-qwen9b"), M("nim-120b"), M("groq-qwen27b")],
+        "models": [M("groq-qwen27b"), M("ollama-gpt20b"), M("gemini-flash"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.70,
     },
     "RESEARCHER": {
@@ -367,7 +379,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Cross-verify metrics via local Python execution and synthesize structured comparison tables.",
             "verification_gate": "All claims must cite verifiable sources or calculations and include a structured comparison table."
         },
-        "models": [M("nim-550b"), M("gemini-pro"), M("or-glm53"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("gemini-pro"), M("gemini-flash"), M("ollama-ultra550b"), M("ollama-gemma4-31b"), M("groq-gpt120b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.65,
     },
     "DESIGNER": {
@@ -399,7 +411,7 @@ ROLES: Dict[str, Dict[str, Any]] = {
             "strike_3": "Guarantee 100% offline/LAN resilience with locally generated PNG icons and root Service Workers.",
             "verification_gate": "UI must be responsive across 240px watch, 390px phone, and 1440px desktop with zero external CDN failures."
         },
-        "models": [M("gemini-pro"), M("nim-550b"), M("or-glm53"), M("local-hermes"), M("groq-gpt120b"), M("local-qwen9b")],
+        "models": [M("gemini-pro"), M("gemini-flash"), M("ollama-gemma4-31b"), M("ollama-beam"), M("groq-gpt120b"), M("local-hermes"), M("local-qwen9b")],
         "fire_threshold": 0.65,
     },
 }
